@@ -67,6 +67,12 @@ class NeoForgeUtils {
 
         @JvmStatic
         fun formatGameVersion(neoForgeVersion: String): String {
+            val originalGameVersion =
+                neoForgeVersion.substring(0, 4) //例neoForgeVersion = 21.0.xxx : 21.0
+            return if (originalGameVersion[originalGameVersion.length - 1] == '0') { //例21.0.xxx
+                "1." + originalGameVersion.substring(0, 2)
+            } else { //例20.2.xxx
+                "1.$originalGameVersion"
             return when {
                 neoForgeVersion.contains("1.20.1") -> "1.20.1"
                 //暂时认为0开头代表特殊版本
@@ -89,6 +95,7 @@ class NeoForgeUtils {
                         if (version.minor != 0) append(".").append(version.minor)
                     }
                 }
+            }
         }
     }
 }
