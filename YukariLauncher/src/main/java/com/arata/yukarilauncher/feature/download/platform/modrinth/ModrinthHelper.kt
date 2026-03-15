@@ -13,7 +13,7 @@ import com.arata.yukarilauncher.feature.download.platform.PlatformNotSupportedEx
 import net.kdt.pojavlaunch.modloaders.modpacks.api.ApiHandler
 import java.io.File
 
-class ModrinthHelper : AbstractPlatformHelper(ApiHandler("https://api.modrinth.com/v2")) {
+class ModrinthHelper : AbstractPlatformHelper(ApiHandler("https://mod.mcimirror.top/modrinth/v2")) {
     override fun copy(): AbstractPlatformHelper {
         return ModrinthHelper()
     }
