@@ -167,8 +167,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     packaging {
@@ -186,7 +186,7 @@ android {
 
     buildToolsVersion = "34.0.0"
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
 }
 
@@ -229,6 +229,11 @@ tasks.named("preBuild") {
 }
 
 dependencies {
+    // ── Termux Terminal Emulator (MIT License) ────────────────────────────────
+    // Provides TerminalSession, TerminalEmulator (the PTY engine)
+    implementation("com.github.termux.termux-app:terminal-emulator:v0.118.0")
+    // Provides TerminalView (the Android View that renders the terminal)
+    implementation("com.github.termux.termux-app:terminal-view:v0.118.0")
     implementation("javax.annotation:javax.annotation-api:1.3.2")
     implementation("commons-codec:commons-codec:1.17.1")
     // implementation("com.wu-man:android-bsf-api:3.1.3")

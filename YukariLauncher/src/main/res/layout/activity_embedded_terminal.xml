@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    activity_embedded_terminal.xml
+    Place in: ZalithLauncher/src/main/res/layout/
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FF1A1A2E">
+
+    <!-- ── Top toolbar ──────────────────────────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/terminal_toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:orientation="horizontal"
+        android:background="#FF16213E"
+        android:gravity="center_vertical"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp">
+
+        <!-- Title -->
+        <android.widget.TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Terminal"
+            android:textColor="#FF00D4FF"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:paddingStart="8dp" />
+
+        <!-- Ctrl -->
+        <ImageButton
+            android:id="@+id/btn_ctrl"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_edit"
+            android:tint="#FFAAAAAA"
+            android:contentDescription="Ctrl key" />
+
+        <!-- Esc -->
+        <ImageButton
+            android:id="@+id/btn_esc"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_delete"
+            android:tint="#FFAAAAAA"
+            android:contentDescription="Escape key" />
+
+        <!-- Tab -->
+        <ImageButton
+            android:id="@+id/btn_tab"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_sort_by_size"
+            android:tint="#FFAAAAAA"
+            android:contentDescription="Tab key" />
+
+        <!-- Keyboard toggle -->
+        <ImageButton
+            android:id="@+id/btn_keyboard"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_input_add"
+            android:tint="#FFAAAAAA"
+            android:contentDescription="Show keyboard" />
+
+        <!-- Close -->
+        <ImageButton
+            android:id="@+id/btn_close"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:tint="#FFFF6B6B"
+            android:contentDescription="Close terminal" />
+
+    </LinearLayout>
+
+    <!-- ── Terminal view (fills all remaining space) ─────────────────────── -->
+    <com.termux.view.TerminalView
+        android:id="@+id/terminal_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#FF0D0D0D" />
+
+    <!-- ── Arrow key toolbar (bottom) ───────────────────────────────────── -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:orientation="horizontal"
+        android:background="#FF16213E"
+        android:gravity="center">
+
+        <ImageButton
+            android:id="@+id/btn_arrow_up"
+            android:layout_width="56dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/arrow_up_float"
+            android:tint="#FFAAAAAA"
+            android:contentDescription="Arrow up" />
+
+        <ImageButton
+            android:id="@+id/btn_arrow_down"
+            android:layout_width="56dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/arrow_down_float"
+            android:tint="#FFAAAAAA"
+            android:contentDescription="Arrow down" />
+
+    </LinearLayout>
+
+</LinearLayout>
