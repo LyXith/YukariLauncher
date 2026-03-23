@@ -98,6 +98,8 @@ import net.kdt.pojavlaunch.tasks.AsyncVersionList;
 import net.kdt.pojavlaunch.utils.NotificationUtils;
 import net.kdt.pojavlaunch.value.MinecraftAccount;
 
+import com.arata.yukarilauncher.termux.TermuxFab;
+
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -492,6 +494,7 @@ public class LauncherActivity extends BaseActivity {
         super.onResume();
         setPageOpacity(AllSettings.getPageOpacity().getValue());
         VersionsManager.INSTANCE.refresh("LauncherActivity:onResume", false);
+        TermuxFab.INSTANCE.attach(this);
     }
 
     @Override
