@@ -63,6 +63,9 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
     private fun setupTerminalView() {
         terminalView.setTextSize(28)
         terminalView.keepScreenOn = true
+        terminalView.isFocusable = true
+        terminalView.isFocusableInTouchMode = true
+        terminalView.requestFocus()
 
         terminalView.setTerminalViewClient(object : TerminalViewClient {
 
@@ -226,6 +229,8 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
             finish()
             return true
         }

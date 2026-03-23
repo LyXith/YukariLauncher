@@ -56,7 +56,7 @@ object TermuxFab {
         val margin = dp(activity, 16)
 
         val params = FrameLayout.LayoutParams(size, size).apply {
-            gravity = Gravity.BOTTOM or Gravity.END
+            gravity = Gravity.BOTTOM or Gravity.START
             bottomMargin = margin
             rightMargin  = margin
         }
