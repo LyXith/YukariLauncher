@@ -3,6 +3,7 @@ package com.arata.yukarilauncher.termux
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -41,36 +42,6 @@ object TermuxBootstrapInstaller {
     private fun bootstrapUrl(): String =
         "https://github.com/termux/termux-packages/releases/latest/download/bootstrap-${abi()}.zip"
 
-    // ── Zip structure ─────────────────────────────────────────────────────────
-
-    private enum class ZipStructure {
-        HAS_USR_PREFIX,   // entries: usr/bin/bash
-        NO_PREFIX,        // entries: bin/bash
-        HAS_DATA_PREFIX   // entries: com.arata.yukariluncher.files/usr/...
-    }
-
-    private fun detectZipStructure(zipFile: File): ZipStructure {
-        val entries = mutableListOf<String>()
-        ZipInputStream(zipFile.inputStream().buffered()).use { zis ->
-            var entry: ZipEntry? = zis.nextEntry
-            var count = 0
-            while (entry != null && count < 20) {
-                if (entry.name != "SYMLINKS.txt") {
-                    entries.add(entry.name)
-                    count++
-                }
-                zis.closeEntry()
-                entry = zis.nextEntry
-            }
-        }
-        Log.i(TAG, "First zip entries: ${entries.take(10)}")
-        return when {
-            entries.any { it.startsWith("data/") } -> ZipStructure.HAS_DATA_PREFIX
-            entries.any { it.startsWith("usr/") || it.startsWith("home/") } -> ZipStructure.HAS_USR_PREFIX
-            else -> ZipStructure.NO_PREFIX
-        }
-    }
-
     // ── Download ──────────────────────────────────────────────────────────────
 
     private fun downloadZip(url: String, dest: File, onPercent: (Int) -> Unit) {
@@ -107,10 +78,22 @@ object TermuxBootstrapInstaller {
 
     // ── Extract ───────────────────────────────────────────────────────────────
 
+    /**
+     * Extracts the bootstrap zip into [prefixDir].
+     *
+     * Path normalization — handles all known Termux zip layouts:
+     *   Layout A:  bin/bash          → kept as-is        → prefix/bin/bash  ✓
+     *   Layout B:  usr/bin/bash      → strip "usr/"      → prefix/bin/bash  ✓
+     *   Layout C:  ./bin/bash        → strip "./"        → prefix/bin/bash  ✓
+     *   Layout D:  data/.../files/bin/bash → strip to after "files/" → prefix/bin/bash ✓
+     *
+     * SYMLINKS.txt is read safely using a raw byte buffer to avoid
+     * BufferedReader over-reading the ZipInputStream and corrupting
+     * subsequent entries.
+     */
     private fun extractZip(
         zipFile: File,
-        extractTo: File,
-        structure: ZipStructure,
+        prefixDir: File,
         symlinkLines: MutableList<String>
     ): Int {
         var count = 0
@@ -118,30 +101,31 @@ object TermuxBootstrapInstaller {
             var entry: ZipEntry? = zis.nextEntry
             while (entry != null) {
                 val rawName = entry.name
+                Log.v(TAG, "ZIP entry: $rawName")
 
                 if (rawName == "SYMLINKS.txt") {
-                    symlinkLines.addAll(zis.bufferedReader().readLines())
+                    // ── Safe read: byte buffer only, no BufferedReader ─────────
+                    val baos = ByteArrayOutputStream()
+                    val buf = ByteArray(4096)
+                    var n: Int
+                    while (zis.read(buf).also { n = it } != -1) baos.write(buf, 0, n)
+                    val content = baos.toString("UTF-8")
+                    symlinkLines.addAll(content.lines().filter { it.isNotBlank() })
+                    Log.i(TAG, "Read ${symlinkLines.size} symlink lines")
                     zis.closeEntry()
                     entry = zis.nextEntry
                     continue
                 }
 
-                val name = when (structure) {
-                    ZipStructure.HAS_DATA_PREFIX -> {
-                        val marker = "files/"
-                        val idx = rawName.indexOf(marker)
-                        if (idx >= 0) rawName.substring(idx + marker.length) else rawName
-                    }
-                    else -> rawName.trimStart('/', '.')
-                }
-
-                if (name.isEmpty()) {
+                // ── Normalize path to be relative to $PREFIX ──────────────────
+                val normalized = normalizePath(rawName)
+                if (normalized.isEmpty()) {
                     zis.closeEntry()
                     entry = zis.nextEntry
                     continue
                 }
 
-                val outFile = File(extractTo, name)
+                val outFile = File(prefixDir, normalized)
                 if (entry.isDirectory) {
                     outFile.mkdirs()
                 } else {
@@ -153,33 +137,70 @@ object TermuxBootstrapInstaller {
                     }
                     count++
                 }
+
                 zis.closeEntry()
                 entry = zis.nextEntry
             }
         }
+        Log.i(TAG, "Extracted $count files into ${prefixDir.absolutePath}")
         return count
+    }
+
+    /**
+     * Strips any known prefix from a zip entry name so it is always
+     * relative to $PREFIX (usr/).
+     */
+    private fun normalizePath(raw: String): String {
+        var name = raw.replace('\\', '/')
+
+        // Strip com.arata.yukariluncher.files/ or data/data/.../files/usr/
+        val filesIdx = name.indexOf("files/")
+        if (filesIdx >= 0) {
+            name = name.substring(filesIdx + "files/".length)
+        }
+
+        // Strip leading usr/ — zip already pre-pended it
+        if (name.startsWith("usr/")) name = name.removePrefix("usr/")
+
+        // Strip leading home/ — put home files into their own dir later
+        // (we skip home/ entries entirely; home dir is created separately)
+        if (name.startsWith("home/")) return ""
+
+        // Strip leading ./ or /
+        name = name.trimStart('.', '/')
+
+        return name.trim()
     }
 
     // ── Symlinks ──────────────────────────────────────────────────────────────
 
-    private fun createSymlinks(root: File, lines: List<String>) {
+    /**
+     * SYMLINKS.txt format:  target←linkpath
+     * Both paths are relative to $PREFIX.
+     */
+    private fun createSymlinks(prefixDir: File, lines: List<String>) {
         var ok = 0; var fail = 0
         for (line in lines) {
-            val sepIdx = line.indexOf('\u2190')   // ← character
+            val sepIdx = line.indexOf('\u2190')  // ← U+2190
             if (sepIdx < 0) continue
             val target   = line.substring(0, sepIdx).trim()
             val linkPath = line.substring(sepIdx + 1).trim()
-            val linkFile = File(root, linkPath)
+
+            // linkPath in SYMLINKS.txt may or may not include usr/ prefix — normalize it
+            val normalizedLink = normalizePath(linkPath).takeIf { it.isNotEmpty() } ?: continue
+
+            val linkFile = File(prefixDir, normalizedLink)
             linkFile.parentFile?.mkdirs()
+
             try {
                 if (java.nio.file.Files.isSymbolicLink(linkFile.toPath()) || linkFile.exists())
                     linkFile.delete()
                 val result = ProcessBuilder("ln", "-sf", target, linkFile.absolutePath)
                     .redirectErrorStream(true).start().waitFor()
-                if (result == 0) ok++ else { fail++; Log.w(TAG, "ln failed: $linkPath → $target") }
+                if (result == 0) ok++ else { fail++; Log.w(TAG, "ln failed: $normalizedLink → $target") }
             } catch (e: Exception) {
                 fail++
-                Log.w(TAG, "Symlink exception: $linkPath → $target : ${e.message}")
+                Log.w(TAG, "Symlink error: $normalizedLink → $target : ${e.message}")
             }
         }
         Log.i(TAG, "Symlinks: $ok ok, $fail failed")
@@ -187,14 +208,13 @@ object TermuxBootstrapInstaller {
 
     // ── chmod ─────────────────────────────────────────────────────────────────
 
-    private fun makeBinariesExecutable(prefix: File) {
+    private fun makeBinariesExecutable(prefixDir: File) {
         listOf("bin", "libexec").forEach { dir ->
-            File(prefix, dir).listFiles()?.forEach { it.setExecutable(true, false) }
+            File(prefixDir, dir).listFiles()?.forEach { it.setExecutable(true, false) }
         }
     }
 
     // ── Public install ────────────────────────────────────────────────────────
-    // Declared LAST so all private helpers above are already in scope
 
     fun install(ctx: Context, onProgress: (Progress) -> Unit) {
         try {
@@ -206,8 +226,11 @@ object TermuxBootstrapInstaller {
                 return
             }
 
+            // Clean any partial previous install
             bootstrapRootDir(ctx).deleteRecursively()
             bootstrapRootDir(ctx).mkdirs()
+            prefixDir(ctx).mkdirs()
+            homeDir(ctx).mkdirs()
 
             val zipFile = File(ctx.cacheDir, "bootstrap-${abi()}.zip")
 
@@ -217,35 +240,26 @@ object TermuxBootstrapInstaller {
             Log.i(TAG, "Zip size: ${zipFile.length()} bytes")
 
             onProgress(Progress(Stage.EXTRACTING))
-            val structure = detectZipStructure(zipFile)
-            Log.i(TAG, "Structure: $structure")
-
-            val extractRoot = when (structure) {
-                ZipStructure.HAS_USR_PREFIX  -> bootstrapRootDir(ctx)
-                ZipStructure.NO_PREFIX       -> prefixDir(ctx)
-                ZipStructure.HAS_DATA_PREFIX -> bootstrapRootDir(ctx)
-            }
-            extractRoot.mkdirs()
-
             val symlinkLines = mutableListOf<String>()
-            val fileCount = extractZip(zipFile, extractRoot, structure, symlinkLines)
-            Log.i(TAG, "Extracted $fileCount files into ${extractRoot.absolutePath}")
+            // Always extract into prefixDir — normalizePath() handles all layouts
+            val fileCount = extractZip(zipFile, prefixDir(ctx), symlinkLines)
+            Log.i(TAG, "Extracted $fileCount files")
             zipFile.delete()
 
-            // Verify
+            // Verify bash landed correctly
             val bash = File(prefixDir(ctx), "bin/bash")
-            Log.i(TAG, "bash exists: ${bash.exists()} → ${bash.absolutePath}")
+            Log.i(TAG, "bash exists: ${bash.exists()} at ${bash.absolutePath}")
+
             if (!bash.exists()) {
-                Log.e(TAG, "Contents after extract:")
-                bootstrapRootDir(ctx).walkTopDown().take(40).forEach { Log.e(TAG, "  $it") }
-                throw Exception("bash not found after extraction (structure=$structure)")
+                Log.e(TAG, "=== bootstrap/usr contents ===")
+                prefixDir(ctx).walkTopDown().take(50).forEach { Log.e(TAG, "  $it") }
+                throw Exception("bash not found after extraction")
             }
 
             onProgress(Progress(Stage.SYMLINKS))
-            createSymlinks(bootstrapRootDir(ctx), symlinkLines)
+            createSymlinks(prefixDir(ctx), symlinkLines)
             makeBinariesExecutable(prefixDir(ctx))
 
-            homeDir(ctx).mkdirs()
             File(prefixDir(ctx), "tmp").mkdirs()
 
             onProgress(Progress(Stage.DONE))
