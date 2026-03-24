@@ -1,17 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    activity_embedded_terminal.xml
-    Place in: ZalithLauncher/src/main/res/layout/
-    Your original toolbar/terminal layout is preserved exactly.
-    A FrameLayout wrapper + loading overlay have been added on top.
--->
 <FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#FF1A1A2E">
 
-    <!-- ── Your original layout (unchanged) ─────────────────────────────── -->
+    <!-- ── Terminal (hidden until environment is ready) ───────────────────── -->
     <LinearLayout
         android:id="@+id/terminal_main_layout"
         android:layout_width="match_parent"
@@ -30,7 +24,7 @@
             android:paddingStart="4dp"
             android:paddingEnd="4dp">
 
-            <android.widget.TextView
+            <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -125,7 +119,7 @@
 
     </LinearLayout>
 
-    <!-- ── Loading overlay (shown while bootstrap downloads) ─────────────── -->
+    <!-- ── Loading overlay (shown first while environment resolves) ───────── -->
     <LinearLayout
         android:id="@+id/loading_layout"
         android:layout_width="match_parent"

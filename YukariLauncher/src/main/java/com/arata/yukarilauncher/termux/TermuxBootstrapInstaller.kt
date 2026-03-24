@@ -12,121 +12,101 @@ import java.util.zip.ZipInputStream
 /**
  * TermuxBootstrapInstaller
  *
- * Downloads and extracts the official Termux bootstrap into the launcher's
- * own private storage — no Termux app required.
+ * Downloads and extracts the official Termux bootstrap zip.
  *
- * Layout after install:
- *   context.filesDir/
- *     bootstrap/
- *       usr/      ← $PREFIX  (bin, lib, etc, share …)
- *       home/     ← $HOME
- *       tmp/      ← $TMPDIR
+ * Bootstrap zip structure (what's actually inside the zip):
+ *   usr/bin/bash
+ *   usr/bin/sh -> bash   (symlink via SYMLINKS.txt)
+ *   usr/lib/...
+ *   home/
+ *   SYMLINKS.txt
  *
- * The bootstrap zip contains a SYMLINKS.txt that lists symlinks to create
- * (format: "target←linkpath" per line). This installer handles that too.
+ * So we extract relative to bootstrapRootDir (NOT prefixDir).
+ * After extraction:
+ *   bootstrapRootDir/
+ *     usr/bin/bash    ← $PREFIX/bin/bash
+ *     usr/lib/...
+ *     home/           ← $HOME
+ *     tmp -> usr/tmp  ← created manually
  */
 object TermuxBootstrapInstaller {
 
     private const val TAG = "BootstrapInstaller"
 
-    // ── Paths ─────────────────────────────────────────────────────────────────
+    // ── Directory layout ──────────────────────────────────────────────────────
 
     fun bootstrapRootDir(ctx: Context) = File(ctx.filesDir, "bootstrap")
     fun prefixDir(ctx: Context)        = File(bootstrapRootDir(ctx), "usr")
     fun homeDir(ctx: Context)          = File(bootstrapRootDir(ctx), "home")
-    fun tmpDir(ctx: Context)           = File(prefixDir(ctx), "tmp")
 
-    /** True if the bootstrap is already extracted. */
-    fun isInstalled(ctx: Context): Boolean {
-        val bash = File(prefixDir(ctx), "bin/bash")
-        return bash.exists()
+    fun isInstalled(ctx: Context): Boolean =
+        File(prefixDir(ctx), "bin/bash").exists()
+
+    // ── ABI ───────────────────────────────────────────────────────────────────
+
+    private fun abi(): String = when {
+        Build.SUPPORTED_ABIS.any { it == "arm64-v8a" }   -> "aarch64"
+        Build.SUPPORTED_ABIS.any { it == "armeabi-v7a" }  -> "arm"
+        Build.SUPPORTED_ABIS.any { it == "x86_64" }       -> "x86_64"
+        Build.SUPPORTED_ABIS.any { it.startsWith("x86") } -> "i686"
+        else -> "aarch64"
     }
 
-    // ── ABI detection ─────────────────────────────────────────────────────────
+    // ── URL ───────────────────────────────────────────────────────────────────
 
-    private fun bootstrapAbi(): String {
-        val supported = Build.SUPPORTED_ABIS
-        return when {
-            supported.any { it == "arm64-v8a" }   -> "aarch64"
-            supported.any { it == "armeabi-v7a" }  -> "arm"
-            supported.any { it == "x86_64" }       -> "x86_64"
-            supported.any { it.startsWith("x86") } -> "i686"
-            else -> "aarch64"  // safe default
-        }
-    }
+    private fun bootstrapUrl(): String =
+        "https://packages.termux.dev/bootstrap/bootstrap-${abi()}.zip"
 
-    // ── Bootstrap URL ─────────────────────────────────────────────────────────
+    // ── Progress model ────────────────────────────────────────────────────────
 
-    private fun bootstrapUrl(): String {
-        val abi = bootstrapAbi()
-        // Official Termux bootstrap zip from packages.termux.dev
-        return "https://packages.termux.dev/bootstrap/bootstrap-${abi}.zip"
-    }
-
-    // ── Install ───────────────────────────────────────────────────────────────
+    enum class Stage { CHECKING, DOWNLOADING, EXTRACTING, SYMLINKS, DONE, ERROR }
 
     data class Progress(
         val stage: Stage,
-        val percent: Int = 0,       // 0–100 during DOWNLOADING
+        val percent: Int = 0,
         val error: Throwable? = null
     )
 
-    enum class Stage {
-        CHECKING, DOWNLOADING, EXTRACTING, SYMLINKS, DONE, ERROR
-    }
+    // ── Public install entry point ────────────────────────────────────────────
 
-    /**
-     * Installs the bootstrap. Call from a background thread / coroutine.
-     * Reports progress via [onProgress] (called on whatever thread this runs on).
-     *
-     * Example (in a coroutine):
-     * ```kotlin
-     * lifecycleScope.launch(Dispatchers.IO) {
-     *     TermuxBootstrapInstaller.install(context) { progress ->
-     *         withContext(Dispatchers.Main) { updateUi(progress) }
-     *     }
-     * }
-     * ```
-     */
     fun install(ctx: Context, onProgress: (Progress) -> Unit) {
         try {
             onProgress(Progress(Stage.CHECKING))
 
             if (isInstalled(ctx)) {
-                Log.i(TAG, "Bootstrap already installed — skipping.")
+                Log.i(TAG, "Already installed.")
                 onProgress(Progress(Stage.DONE))
                 return
             }
 
-            // Prepare directories
-            val prefix = prefixDir(ctx)
-            val home   = homeDir(ctx)
-            val tmp    = tmpDir(ctx)
+            // Clean slate in case of a previous partial install
+            bootstrapRootDir(ctx).deleteRecursively()
             bootstrapRootDir(ctx).mkdirs()
-            prefix.mkdirs()
-            home.mkdirs()
-            tmp.mkdirs()
 
-            // Download to a temp file
-            val zipFile = File(ctx.cacheDir, "bootstrap.zip")
-            downloadZip(bootstrapUrl(), zipFile) { percent ->
-                onProgress(Progress(Stage.DOWNLOADING, percent))
+            // Download
+            val zipFile = File(ctx.cacheDir, "bootstrap-${abi()}.zip")
+            downloadZip(bootstrapUrl(), zipFile) { pct ->
+                onProgress(Progress(Stage.DOWNLOADING, pct))
             }
 
-            // Extract
+            // Extract — relative to bootstrapRootDir so usr/ and home/ land correctly
             onProgress(Progress(Stage.EXTRACTING))
             val symlinkLines = mutableListOf<String>()
-            extractZip(zipFile, prefix, symlinkLines)
+            extractZip(zipFile, bootstrapRootDir(ctx), symlinkLines)
             zipFile.delete()
 
-            // Create symlinks from SYMLINKS.txt
+            // Symlinks
             onProgress(Progress(Stage.SYMLINKS))
-            createSymlinks(prefix, symlinkLines)
+            createSymlinks(bootstrapRootDir(ctx), symlinkLines)
 
-            // Make all binaries executable
-            makeBinariesExecutable(prefix)
+            // chmod +x everything in usr/bin
+            makeBinariesExecutable(prefixDir(ctx))
 
-            Log.i(TAG, "Bootstrap installed to: ${prefix.absolutePath}")
+            // Ensure home and tmp dirs exist
+            homeDir(ctx).mkdirs()
+            File(prefixDir(ctx), "tmp").mkdirs()
+
+            Log.i(TAG, "Bootstrap installed. bash=${File(prefixDir(ctx), "bin/bash").exists()}")
             onProgress(Progress(Stage.DONE))
 
         } catch (e: Exception) {
@@ -138,124 +118,145 @@ object TermuxBootstrapInstaller {
     // ── Download ──────────────────────────────────────────────────────────────
 
     private fun downloadZip(url: String, dest: File, onPercent: (Int) -> Unit) {
-        Log.i(TAG, "Downloading bootstrap from: $url")
+        Log.i(TAG, "Downloading: $url")
         val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 15_000
-        conn.readTimeout    = 60_000
+        conn.connectTimeout = 20_000
+        conn.readTimeout    = 120_000
+        conn.instanceFollowRedirects = true
         conn.connect()
 
-        val total = conn.contentLength.toLong()
+        if (conn.responseCode != 200) {
+            throw Exception("HTTP ${conn.responseCode} from $url")
+        }
+
+        val total = conn.contentLengthLong
         var downloaded = 0L
-        var lastPercent = -1
+        var lastPct = -1
 
         conn.inputStream.use { input ->
             FileOutputStream(dest).use { output ->
-                val buf = ByteArray(8192)
+                val buf = ByteArray(16_384)
                 var n: Int
                 while (input.read(buf).also { n = it } != -1) {
                     output.write(buf, 0, n)
                     downloaded += n
                     if (total > 0) {
                         val pct = (downloaded * 100 / total).toInt()
-                        if (pct != lastPercent) {
-                            lastPercent = pct
-                            onPercent(pct)
-                        }
+                        if (pct != lastPct) { lastPct = pct; onPercent(pct) }
                     }
                 }
             }
         }
-        Log.i(TAG, "Download complete: ${dest.length()} bytes")
+        Log.i(TAG, "Downloaded ${dest.length()} bytes")
     }
 
     // ── Extract ───────────────────────────────────────────────────────────────
 
-    private fun extractZip(zipFile: File, prefix: File, symlinkLines: MutableList<String>) {
+    /**
+     * Extracts zip into [extractTo].
+     * Zip entries look like:
+     *   usr/bin/bash
+     *   usr/lib/libssl.so.3
+     *   home/
+     *   SYMLINKS.txt
+     *
+     * We extract them directly into [extractTo] so paths become:
+     *   extractTo/usr/bin/bash  ← correct
+     */
+    private fun extractZip(
+        zipFile: File,
+        extractTo: File,
+        symlinkLines: MutableList<String>
+    ) {
+        var count = 0
         ZipInputStream(zipFile.inputStream().buffered()).use { zis ->
             var entry = zis.nextEntry
             while (entry != null) {
                 val name = entry.name
 
                 if (name == "SYMLINKS.txt") {
-                    // Read symlink definitions
                     symlinkLines.addAll(zis.bufferedReader().readLines())
                     zis.closeEntry()
                     entry = zis.nextEntry
                     continue
                 }
 
-                val outFile = File(prefix, name)
+                // Strip any leading "./" just in case
+                val cleanName = name.trimStart('/', '.')
+                if (cleanName.isEmpty()) {
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                    continue
+                }
+
+                val outFile = File(extractTo, cleanName)
 
                 if (entry.isDirectory) {
                     outFile.mkdirs()
                 } else {
                     outFile.parentFile?.mkdirs()
                     FileOutputStream(outFile).use { fos ->
-                        val buf = ByteArray(8192)
+                        val buf = ByteArray(16_384)
                         var n: Int
-                        while (zis.read(buf).also { n = it } != -1) {
-                            fos.write(buf, 0, n)
-                        }
+                        while (zis.read(buf).also { n = it } != -1) fos.write(buf, 0, n)
                     }
+                    count++
                 }
 
                 zis.closeEntry()
                 entry = zis.nextEntry
             }
         }
+        Log.i(TAG, "Extracted $count files into ${extractTo.absolutePath}")
     }
 
     // ── Symlinks ──────────────────────────────────────────────────────────────
 
     /**
-     * SYMLINKS.txt format (one per line):
+     * SYMLINKS.txt format — one symlink per line:
      *   <target>←<linkPath>
-     * Both paths are relative to $PREFIX.
+     * Both paths are relative to the bootstrap root (same as zip entries).
      */
-    private fun createSymlinks(prefix: File, lines: List<String>) {
-        var created = 0
+    private fun createSymlinks(root: File, lines: List<String>) {
+        var ok = 0; var fail = 0
         for (line in lines) {
-            val parts = line.split("←")
-            if (parts.size != 2) continue
-
-            val target   = parts[0].trim()
-            val linkPath = parts[1].trim()
-
-            val linkFile = File(prefix, linkPath)
+            val idx = line.indexOf('←')
+            if (idx < 0) continue
+            val target   = line.substring(0, idx).trim()
+            val linkPath = line.substring(idx + 1).trim()  // '←' is 3 bytes in UTF-8
+            val linkFile = File(root, linkPath)
             linkFile.parentFile?.mkdirs()
-
             try {
-                // Use OS symlink via ProcessBuilder (no root needed for app's own files)
+                // Delete stale file/link first
+                if (linkFile.exists() || java.nio.file.Files.isSymbolicLink(linkFile.toPath())) {
+                    linkFile.delete()
+                }
                 val result = ProcessBuilder("ln", "-sf", target, linkFile.absolutePath)
-                    .redirectErrorStream(true)
-                    .start()
-                    .waitFor()
-                if (result == 0) created++
+                    .redirectErrorStream(true).start().waitFor()
+                if (result == 0) ok++ else fail++
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to create symlink $linkPath → $target: ${e.message}")
+                Log.w(TAG, "Symlink failed: $linkPath → $target : ${e.message}")
+                fail++
             }
         }
-        Log.i(TAG, "Created $created symlinks")
+        Log.i(TAG, "Symlinks: $ok created, $fail failed")
     }
 
     // ── chmod ─────────────────────────────────────────────────────────────────
 
     private fun makeBinariesExecutable(prefix: File) {
-        val binDir = File(prefix, "bin")
-        if (!binDir.exists()) return
-        binDir.listFiles()?.forEach { f ->
-            if (f.isFile) f.setExecutable(true, false)
-        }
-        // Also lib executables
-        File(prefix, "lib").walkTopDown().filter { it.isFile }.forEach {
+        File(prefix, "bin").listFiles()?.forEach { it.setExecutable(true, false) }
+        File(prefix, "libexec").walkTopDown().filter { it.isFile }.forEach {
             it.setExecutable(true, false)
         }
-        Log.i(TAG, "Made binaries executable in ${binDir.absolutePath}")
+        File(prefix, "lib").walkTopDown()
+            .filter { it.isFile && !it.name.endsWith(".so") }.forEach {
+                it.setExecutable(true, false)
+            }
     }
 
-    // ── Cleanup ───────────────────────────────────────────────────────────────
+    // ── Uninstall ─────────────────────────────────────────────────────────────
 
-    /** Completely removes the bootstrap (for reinstall / uninstall). */
     fun uninstall(ctx: Context) {
         bootstrapRootDir(ctx).deleteRecursively()
         Log.i(TAG, "Bootstrap removed.")
