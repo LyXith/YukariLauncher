@@ -39,7 +39,7 @@ object TermuxBootstrapInstaller {
     }
 
     private fun bootstrapUrl(): String =
-        "https://packages.termux.dev/bootstrap/bootstrap-${abi()}.zip"
+        "https://github.com/termux/termux-packages/releases/latest/download/bootstrap-${abi()}.zip"
 
     // ── Zip structure ─────────────────────────────────────────────────────────
 
