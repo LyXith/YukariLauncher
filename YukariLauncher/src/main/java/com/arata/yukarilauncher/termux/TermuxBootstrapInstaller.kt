@@ -46,7 +46,7 @@ object TermuxBootstrapInstaller {
     private enum class ZipStructure {
         HAS_USR_PREFIX,   // entries: usr/bin/bash
         NO_PREFIX,        // entries: bin/bash
-        HAS_DATA_PREFIX   // entries: data/data/com.termux/files/usr/...
+        HAS_DATA_PREFIX   // entries: com.arata.yukariluncher.files/usr/...
     }
 
     private fun detectZipStructure(zipFile: File): ZipStructure {

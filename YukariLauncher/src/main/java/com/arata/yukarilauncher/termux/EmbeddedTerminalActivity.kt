@@ -33,18 +33,17 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
         private const val TAG = "EmbeddedTerminal"
     }
 
-    // Views
     private lateinit var terminalView: TerminalView
-    private lateinit var terminalMainLayout: LinearLayout  // FIX: need parent ref
+    private lateinit var terminalMainLayout: LinearLayout
     private lateinit var loadingLayout: LinearLayout
     private lateinit var loadingText: TextView
     private lateinit var loadingBar: ProgressBar
 
     private var terminalSession: TerminalSession? = null
 
-    // Resolved paths
-    private var prefixDir: String = "/system"
-    private var homeDir: String   = "/data/local/tmp"
+    // Resolved after bootstrap check — defaults to bare system shell
+    private var prefixDir: String = ""
+    private var homeDir: String   = ""
     private var shellPath: String = "/system/bin/sh"
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -56,7 +55,7 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
         setContentView(R.layout.activity_embedded_terminal)
 
         terminalView       = findViewById(R.id.terminal_view)
-        terminalMainLayout = findViewById(R.id.terminal_main_layout)  // FIX: grab parent
+        terminalMainLayout = findViewById(R.id.terminal_main_layout)
         loadingLayout      = findViewById(R.id.loading_layout)
         loadingText        = findViewById(R.id.loading_text)
         loadingBar         = findViewById(R.id.loading_bar)
@@ -64,7 +63,6 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
         terminalView.isFocusable = true
         terminalView.isFocusableInTouchMode = true
 
-        // Show loading immediately so screen isn't blank
         showLoading("Checking environment…")
         setupEnvironmentThenStart()
     }
@@ -75,7 +73,7 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Environment resolution
+    // Environment — local bootstrap only
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun setupEnvironmentThenStart() {
@@ -84,13 +82,10 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
                 withContext(Dispatchers.IO) { resolveEnvironment() }
             } catch (e: Exception) {
                 Log.e(TAG, "Environment setup failed: ${e.message}", e)
-                // Fall back to system sh — still usable
                 prefixDir = filesDir.absolutePath
                 homeDir   = filesDir.absolutePath
                 shellPath = "/system/bin/sh"
             }
-
-            // FIX: show terminal_main_layout (the parent), not just terminalView
             hideLoading()
             setupTerminalView()
             createSession()
@@ -100,23 +95,13 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
     }
 
     private suspend fun resolveEnvironment() {
-        // Option 1: Termux already installed and accessible
-        val termuxBash = "${TermuxIntegrationManager.TERMUX_PREFIX_DIR}/bin/bash"
-        if (java.io.File(termuxBash).let { it.exists() && it.canExecute() }) {
-            prefixDir = TermuxIntegrationManager.TERMUX_PREFIX_DIR
-            homeDir   = TermuxIntegrationManager.TERMUX_HOME_DIR
-            shellPath = termuxBash
-            Log.i(TAG, "Using Termux prefix: $prefixDir")
-            return
-        }
-
-        // Option 2: launcher-private bootstrap
         val localPrefix = TermuxBootstrapInstaller.prefixDir(this@EmbeddedTerminalActivity)
         val localHome   = TermuxBootstrapInstaller.homeDir(this@EmbeddedTerminalActivity)
         val localBash   = java.io.File(localPrefix, "bin/bash")
 
         if (!localBash.exists()) {
             withContext(Dispatchers.Main) { showLoading("Setting up environment…") }
+
             TermuxBootstrapInstaller.install(this@EmbeddedTerminalActivity) { progress ->
                 runBlocking {
                     withContext(Dispatchers.Main) {
@@ -141,14 +126,12 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
             homeDir   = localHome.absolutePath
             shellPath = localBash.absolutePath
             Log.i(TAG, "Using local bootstrap: $prefixDir")
-            return
+        } else {
+            Log.w(TAG, "Bootstrap unavailable, falling back to /system/bin/sh")
+            prefixDir = filesDir.absolutePath
+            homeDir   = filesDir.absolutePath
+            shellPath = "/system/bin/sh"
         }
-
-        // Option 3: system sh fallback
-        Log.w(TAG, "Falling back to /system/bin/sh")
-        prefixDir = filesDir.absolutePath
-        homeDir   = filesDir.absolutePath
-        shellPath = "/system/bin/sh"
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -167,7 +150,6 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
             override fun logVerbose(tag: String?, message: String?) { Log.v(tag ?: TAG, message ?: "") }
             override fun logStackTraceWithMessage(tag: String?, message: String?, e: Exception?) { Log.e(tag ?: TAG, message, e) }
             override fun logStackTrace(tag: String?, e: Exception?) { Log.e(tag ?: TAG, "Stack trace", e) }
-
             override fun onScale(scale: Float): Float = scale.coerceIn(0.5f, 3.0f)
             override fun onSingleTapUp(e: MotionEvent?) { showSoftKeyboard() }
             override fun onKeyUp(keyCode: Int, e: KeyEvent?): Boolean = false
@@ -234,12 +216,10 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
             TerminalEmulator.DEFAULT_TERMINAL_TRANSCRIPT_ROWS,
             client
         )
-
         terminalView.attachSession(terminalSession)
 
-        if (!initialCommand.isNullOrBlank()) {
+        if (!initialCommand.isNullOrBlank())
             terminalSession?.write("$initialCommand\n")
-        }
     }
 
     private fun buildEnvironment(): Array<String> = arrayOf(
@@ -265,13 +245,13 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun setupToolbar() {
-        findViewById<ImageButton>(R.id.btn_ctrl)?.setOnClickListener { terminalSession?.write("\u0003") }
-        findViewById<ImageButton>(R.id.btn_esc)?.setOnClickListener  { terminalSession?.write("\u001b") }
-        findViewById<ImageButton>(R.id.btn_tab)?.setOnClickListener  { terminalSession?.write("\t") }
+        findViewById<ImageButton>(R.id.btn_ctrl)?.setOnClickListener       { terminalSession?.write("\u0003") }
+        findViewById<ImageButton>(R.id.btn_esc)?.setOnClickListener        { terminalSession?.write("\u001b") }
+        findViewById<ImageButton>(R.id.btn_tab)?.setOnClickListener        { terminalSession?.write("\t") }
         findViewById<ImageButton>(R.id.btn_arrow_up)?.setOnClickListener   { terminalSession?.write("\u001b[A") }
         findViewById<ImageButton>(R.id.btn_arrow_down)?.setOnClickListener { terminalSession?.write("\u001b[B") }
-        findViewById<ImageButton>(R.id.btn_keyboard)?.setOnClickListener { showSoftKeyboard() }
-        findViewById<ImageButton>(R.id.btn_close)?.setOnClickListener   { finish() }
+        findViewById<ImageButton>(R.id.btn_keyboard)?.setOnClickListener   { showSoftKeyboard() }
+        findViewById<ImageButton>(R.id.btn_close)?.setOnClickListener      { finish() }
     }
 
     private fun showSoftKeyboard() {
@@ -291,23 +271,19 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Loading helpers — FIX: toggle terminal_main_layout, not just terminalView
+    // Loading
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun showLoading(message: String, percent: Int = -1) {
         loadingLayout.visibility      = View.VISIBLE
-        terminalMainLayout.visibility = View.GONE   // hide the parent
+        terminalMainLayout.visibility = View.GONE
         loadingText.text = message
-        if (percent in 0..100) {
-            loadingBar.visibility = View.VISIBLE
-            loadingBar.progress   = percent
-        } else {
-            loadingBar.visibility = View.GONE
-        }
+        loadingBar.visibility = if (percent in 0..100) View.VISIBLE else View.GONE
+        if (percent in 0..100) loadingBar.progress = percent
     }
 
     private fun hideLoading() {
         loadingLayout.visibility      = View.GONE
-        terminalMainLayout.visibility = View.VISIBLE  // show the parent
+        terminalMainLayout.visibility = View.VISIBLE
     }
 }
