@@ -1,38 +1,49 @@
 package com.arata.yukarilauncher.termux
 
 import android.content.Context
-import android.graphics.Typeface
 import android.os.Bundle
+import android.os.Process
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.arata.yukarilauncher.R
 import com.termux.terminal.TerminalEmulator
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 class EmbeddedTerminalActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_INITIAL_COMMAND = "initial_command"
         private const val TAG = "EmbeddedTerminal"
-
-        private val DEFAULT_SHELL: String
-            get() {
-                val termuxBash = "/data/data/com.termux/files/usr/bin/bash"
-                return if (java.io.File(termuxBash).exists()) termuxBash else "/system/bin/sh"
-            }
     }
 
     private lateinit var terminalView: TerminalView
+    private lateinit var loadingLayout: LinearLayout
+    private lateinit var loadingText: TextView
+    private lateinit var loadingBar: ProgressBar
+
     private var terminalSession: TerminalSession? = null
+
+    // Resolved after bootstrap check
+    private lateinit var prefixDir: String
+    private lateinit var homeDir: String
+    private lateinit var shellPath: String
 
     // ─────────────────────────────────────────────────────────────────────────
     // Lifecycle
@@ -42,14 +53,18 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_embedded_terminal)
 
-        terminalView = findViewById(R.id.terminal_view)
-        setupTerminalView()
-        createSession()
-        setupToolbar()
-    }
+        terminalView  = findViewById(R.id.terminal_view)
+        loadingLayout = findViewById(R.id.loading_layout)
+        loadingText   = findViewById(R.id.loading_text)
+        loadingBar    = findViewById(R.id.loading_bar)
 
-    // NOTE: TerminalView in v0.118.0 does NOT have onResume()/onPause() —
-    //       those methods were removed. Nothing needed here.
+        // Your additions — keep focus setup
+        terminalView.isFocusable = true
+        terminalView.isFocusableInTouchMode = true
+
+        showLoading("Checking environment…")
+        setupEnvironmentThenStart()
+    }
 
     override fun onDestroy() {
         super.onDestroy()
@@ -57,19 +72,89 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Terminal setup
+    // Bootstrap / environment resolution
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun setupEnvironmentThenStart() {
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) { resolveEnvironment() }
+            hideLoading()
+            setupTerminalView()
+            createSession()
+            setupToolbar()
+            // Your addition — request focus after session is ready
+            terminalView.requestFocus()
+        }
+    }
+
+    /**
+     * Priority:
+     *  1. Termux $PREFIX (if installed and readable)
+     *  2. Launcher's own bootstrap (downloads once to filesDir)
+     *  3. /system/bin/sh bare fallback
+     */
+    private suspend fun resolveEnvironment() {
+        // Option 1: existing Termux install
+        val termuxBash = "${TermuxIntegrationManager.TERMUX_PREFIX_DIR}/bin/bash"
+        if (java.io.File(termuxBash).let { it.exists() && it.canExecute() }) {
+            prefixDir = TermuxIntegrationManager.TERMUX_PREFIX_DIR
+            homeDir   = TermuxIntegrationManager.TERMUX_HOME_DIR
+            shellPath = termuxBash
+            Log.i(TAG, "Using Termux prefix: $prefixDir")
+            return
+        }
+
+        // Option 2: launcher-private bootstrap
+        val localPrefix = TermuxBootstrapInstaller.prefixDir(this@EmbeddedTerminalActivity)
+        val localHome   = TermuxBootstrapInstaller.homeDir(this@EmbeddedTerminalActivity)
+        val localBash   = java.io.File(localPrefix, "bin/bash")
+
+        if (!localBash.exists()) {
+            withContext(Dispatchers.Main) { showLoading("Setting up environment…") }
+            TermuxBootstrapInstaller.install(this@EmbeddedTerminalActivity) { progress ->
+                runBlocking {
+                    withContext(Dispatchers.Main) {
+                        when (progress.stage) {
+                            TermuxBootstrapInstaller.Stage.DOWNLOADING ->
+                                showLoading("Downloading bootstrap… ${progress.percent}%", progress.percent)
+                            TermuxBootstrapInstaller.Stage.EXTRACTING ->
+                                showLoading("Extracting…")
+                            TermuxBootstrapInstaller.Stage.SYMLINKS ->
+                                showLoading("Setting up symlinks…")
+                            TermuxBootstrapInstaller.Stage.ERROR ->
+                                showLoading("Failed: ${progress.error?.message}")
+                            else -> {}
+                        }
+                    }
+                }
+            }
+        }
+
+        if (localBash.exists()) {
+            prefixDir = localPrefix.absolutePath
+            homeDir   = localHome.absolutePath
+            shellPath = localBash.absolutePath
+            Log.i(TAG, "Using local bootstrap: $prefixDir")
+            return
+        }
+
+        // Option 3: bare fallback
+        Log.w(TAG, "Falling back to /system/bin/sh")
+        prefixDir = filesDir.absolutePath
+        homeDir   = filesDir.absolutePath
+        shellPath = "/system/bin/sh"
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Terminal setup — your exact client kept
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun setupTerminalView() {
         terminalView.setTextSize(28)
         terminalView.keepScreenOn = true
-        terminalView.isFocusable = true
-        terminalView.isFocusableInTouchMode = true
-        terminalView.requestFocus()
 
         terminalView.setTerminalViewClient(object : TerminalViewClient {
 
-            // ── Logging ───────────────────────────────────────────────────────
             override fun logError(tag: String?, message: String?)   { Log.e(tag ?: TAG, message ?: "") }
             override fun logWarn(tag: String?, message: String?)    { Log.w(tag ?: TAG, message ?: "") }
             override fun logInfo(tag: String?, message: String?)    { Log.i(tag ?: TAG, message ?: "") }
@@ -78,18 +163,12 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
             override fun logStackTraceWithMessage(tag: String?, message: String?, e: Exception?) { Log.e(tag ?: TAG, message, e) }
             override fun logStackTrace(tag: String?, e: Exception?) { Log.e(tag ?: TAG, "Stack trace", e) }
 
-            // ── Touch / scale ─────────────────────────────────────────────────
             override fun onScale(scale: Float): Float = scale.coerceIn(0.5f, 3.0f)
+            override fun onSingleTapUp(e: MotionEvent?) { showSoftKeyboard() }
 
-            override fun onSingleTapUp(e: MotionEvent?) {
-                showSoftKeyboard()
-            }
-
-            // ── Key events — required abstract in v0.118.0 ────────────────────
             override fun onKeyUp(keyCode: Int, e: KeyEvent?): Boolean = false
             override fun onKeyDown(keyCode: Int, e: KeyEvent?, session: TerminalSession?): Boolean = false
 
-            // ── Misc ──────────────────────────────────────────────────────────
             override fun shouldBackButtonBeMappedToEscape(): Boolean = false
             override fun shouldEnforceCharBasedInput(): Boolean = true
             override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
@@ -107,7 +186,7 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
 
     private fun createSession() {
         val initialCommand = intent.getStringExtra(EXTRA_INITIAL_COMMAND)
-        val workDir = TermuxIntegrationManager.getHomeDir()?.absolutePath
+        val workDir = java.io.File(homeDir).takeIf { it.exists() }?.absolutePath
             ?: filesDir.absolutePath
 
         val client = object : TerminalSessionClient {
@@ -131,14 +210,11 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
             }
             override fun onPasteTextFromClipboard(session: TerminalSession?) {
                 val cb = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                val text = cb.primaryClip?.getItemAt(0)?.text?.toString()
-                if (text != null) session?.write(text)
+                cb.primaryClip?.getItemAt(0)?.text?.toString()?.let { session?.write(it) }
             }
             override fun onBell(session: TerminalSession) {}
             override fun onColorsChanged(session: TerminalSession) {}
             override fun onTerminalCursorStateChange(state: Boolean) {}
-
-            // NOTE: setTerminalShellPid was removed in v0.118.0 — do NOT override it
 
             override fun getTerminalCursorStyle(): Int =
                 TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE
@@ -153,7 +229,7 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
         }
 
         terminalSession = TerminalSession(
-            DEFAULT_SHELL,
+            shellPath,
             workDir,
             arrayOf<String>(),
             buildEnvironment(),
@@ -168,54 +244,52 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Uses resolved bootstrap paths.
+     * USER / LOGNAME / PS1 prevent the shell showing '#' (root prompt).
+     */
     private fun buildEnvironment(): Array<String> {
-        val prefix = TermuxIntegrationManager.TERMUX_PREFIX_DIR
-        val home   = TermuxIntegrationManager.TERMUX_HOME_DIR
         return arrayOf(
             "TERM=xterm-256color",
             "COLORTERM=truecolor",
-            "HOME=$home",
-            "PREFIX=$prefix",
-            "PATH=$prefix/bin:$prefix/bin/applets:/system/bin:/system/xbin",
-            "TMPDIR=$prefix/tmp",
+            "HOME=$homeDir",
+            "PREFIX=$prefixDir",
+            "PATH=$prefixDir/bin:$prefixDir/bin/applets:/system/bin:/system/xbin",
+            "TMPDIR=$prefixDir/tmp",
             "LANG=en_US.UTF-8",
-            "SHELL=$DEFAULT_SHELL",
-            "LD_LIBRARY_PATH=$prefix/lib"
+            "SHELL=$shellPath",
+            "LD_LIBRARY_PATH=$prefixDir/lib",
+            // ── Root prompt fix ───────────────────────────────────────────────
+            "USER=shell",
+            "LOGNAME=shell",
+            "UID=${Process.myUid()}",
+            "PS1=\\[\\e[0;32m\\]yukari\\[\\e[0m\\]:\\[\\e[0;34m\\]\\w\\[\\e[0m\\]\\$ ",
         )
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Toolbar
+    // Toolbar — your exact implementation kept
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun setupToolbar() {
-        // Ctrl — send ASCII control character for the NEXT key manually
-        // (sendControlKey() was removed; we simulate Ctrl+C as a common default)
         findViewById<ImageButton>(R.id.btn_ctrl)?.setOnClickListener {
-            // Write ETX (Ctrl+C) — most useful default; adapt if needed
             terminalSession?.write("\u0003")
         }
-        // ESC — write escape byte as a String
         findViewById<ImageButton>(R.id.btn_esc)?.setOnClickListener {
-            terminalSession?.write("\u001b")   // ESC as String, not ByteArray
+            terminalSession?.write("\u001b")
         }
-        // Tab
         findViewById<ImageButton>(R.id.btn_tab)?.setOnClickListener {
             terminalSession?.write("\t")
         }
-        // Arrow up
         findViewById<ImageButton>(R.id.btn_arrow_up)?.setOnClickListener {
             terminalSession?.write("\u001b[A")
         }
-        // Arrow down
         findViewById<ImageButton>(R.id.btn_arrow_down)?.setOnClickListener {
             terminalSession?.write("\u001b[B")
         }
-        // Keyboard
         findViewById<ImageButton>(R.id.btn_keyboard)?.setOnClickListener {
             showSoftKeyboard()
         }
-        // Close
         findViewById<ImageButton>(R.id.btn_close)?.setOnClickListener {
             finish()
         }
@@ -227,6 +301,7 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
         imm.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
     }
 
+    // Your exact back press — hides keyboard then finishes
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -235,5 +310,26 @@ class EmbeddedTerminalActivity : AppCompatActivity() {
             return true
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Loading helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun showLoading(message: String, percent: Int = -1) {
+        loadingLayout.visibility = View.VISIBLE
+        terminalView.visibility  = View.GONE
+        loadingText.text = message
+        if (percent in 0..100) {
+            loadingBar.visibility = View.VISIBLE
+            loadingBar.progress   = percent
+        } else {
+            loadingBar.visibility = View.GONE
+        }
+    }
+
+    private fun hideLoading() {
+        loadingLayout.visibility = View.GONE
+        terminalView.visibility  = View.VISIBLE
     }
 }
