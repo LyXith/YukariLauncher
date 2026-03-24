@@ -10,24 +10,6 @@ import java.net.URL
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 
-/**
- * TermuxBootstrapInstaller
- *
- * Robust bootstrap installer that auto-detects the zip structure.
- *
- * Termux bootstrap zips from packages.termux.dev can have two layouts:
- *
- *   Layout A (no prefix):   bin/bash, lib/libssl.so  → extract into prefixDir (usr/)
- *   Layout B (usr prefix):  usr/bin/bash, usr/lib/   → extract into bootstrapRootDir
- *
- * We peek at the first entries and decide automatically.
- *
- * Final layout on disk:
- *   filesDir/bootstrap/
- *     usr/bin/bash    ← $PREFIX/bin/bash
- *     usr/lib/
- *     home/           ← $HOME
- */
 object TermuxBootstrapInstaller {
 
     private const val TAG = "BootstrapInstaller"
@@ -41,7 +23,12 @@ object TermuxBootstrapInstaller {
     fun isInstalled(ctx: Context): Boolean =
         File(prefixDir(ctx), "bin/bash").exists()
 
-    // ── ABI ───────────────────────────────────────────────────────────────────
+    // ── Progress ──────────────────────────────────────────────────────────────
+
+    enum class Stage { CHECKING, DOWNLOADING, EXTRACTING, SYMLINKS, DONE, ERROR }
+    data class Progress(val stage: Stage, val percent: Int = 0, val error: Throwable? = null)
+
+    // ── ABI + URL ─────────────────────────────────────────────────────────────
 
     private fun abi(): String = when {
         Build.SUPPORTED_ABIS.any { it == "arm64-v8a" }    -> "aarch64"
@@ -54,93 +41,12 @@ object TermuxBootstrapInstaller {
     private fun bootstrapUrl(): String =
         "https://packages.termux.dev/bootstrap/bootstrap-${abi()}.zip"
 
-    // ── Progress ──────────────────────────────────────────────────────────────
-
-    enum class Stage { CHECKING, DOWNLOADING, EXTRACTING, SYMLINKS, DONE, ERROR }
-    data class Progress(val stage: Stage, val percent: Int = 0, val error: Throwable? = null)
-
-    // ── Install ───────────────────────────────────────────────────────────────
-
-    fun install(ctx: Context, onProgress: (Progress) -> Unit) {
-        try {
-            onProgress(Progress(Stage.CHECKING))
-
-            if (isInstalled(ctx)) {
-                Log.i(TAG, "Already installed at ${prefixDir(ctx)}")
-                onProgress(Progress(Stage.DONE))
-                return
-            }
-
-            // Clean partial installs
-            bootstrapRootDir(ctx).deleteRecursively()
-            bootstrapRootDir(ctx).mkdirs()
-
-            val zipFile = File(ctx.cacheDir, "bootstrap-${abi()}.zip")
-
-            // Download
-            downloadZip(bootstrapUrl(), zipFile) { pct ->
-                onProgress(Progress(Stage.DOWNLOADING, pct))
-            }
-            Log.i(TAG, "Zip downloaded: ${zipFile.length()} bytes at ${zipFile.absolutePath}")
-
-            // Peek at zip to determine structure
-            onProgress(Progress(Stage.EXTRACTING))
-            val structure = detectZipStructure(zipFile)
-            Log.i(TAG, "Zip structure detected: $structure")
-
-            // Choose extraction root based on structure
-            val extractRoot = when (structure) {
-                ZipStructure.HAS_USR_PREFIX  -> bootstrapRootDir(ctx)  // zip has usr/bin/bash
-                ZipStructure.NO_PREFIX       -> prefixDir(ctx)          // zip has bin/bash
-                ZipStructure.HAS_DATA_PREFIX -> bootstrapRootDir(ctx)   // zip has data/.../usr/
-            }
-            extractRoot.mkdirs()
-            Log.i(TAG, "Extracting into: ${extractRoot.absolutePath}")
-
-            val symlinkLines = mutableListOf<String>()
-            val fileCount = extractZip(zipFile, extractRoot, structure, symlinkLines)
-            Log.i(TAG, "Extracted $fileCount files")
-            zipFile.delete()
-
-            // Verify bash exists after extraction
-            val bash = File(prefixDir(ctx), "bin/bash")
-            Log.i(TAG, "bash exists after extract: ${bash.exists()} at ${bash.absolutePath}")
-
-            if (!bash.exists()) {
-                // Log what we actually got
-                Log.e(TAG, "bash NOT found! Contents of bootstrapRootDir:")
-                bootstrapRootDir(ctx).walkTopDown().take(30).forEach {
-                    Log.e(TAG, "  ${it.absolutePath}")
-                }
-                throw Exception("bash not found after extraction. Check logs for zip contents.")
-            }
-
-            // Symlinks
-            onProgress(Progress(Stage.SYMLINKS))
-            createSymlinks(bootstrapRootDir(ctx), symlinkLines)
-
-            // chmod
-            makeBinariesExecutable(prefixDir(ctx))
-
-            // Ensure dirs
-            homeDir(ctx).mkdirs()
-            File(prefixDir(ctx), "tmp").mkdirs()
-
-            onProgress(Progress(Stage.DONE))
-            Log.i(TAG, "Bootstrap install complete.")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Bootstrap install FAILED: ${e.message}", e)
-            onProgress(Progress(Stage.ERROR, error = e))
-        }
-    }
-
-    // ── Zip structure detection ───────────────────────────────────────────────
+    // ── Zip structure ─────────────────────────────────────────────────────────
 
     private enum class ZipStructure {
-        HAS_USR_PREFIX,   // entries like usr/bin/bash, home/
-        NO_PREFIX,        // entries like bin/bash, lib/
-        HAS_DATA_PREFIX   // entries like data/data/com.termux/files/usr/...
+        HAS_USR_PREFIX,   // entries: usr/bin/bash
+        NO_PREFIX,        // entries: bin/bash
+        HAS_DATA_PREFIX   // entries: data/data/com.termux/files/usr/...
     }
 
     private fun detectZipStructure(zipFile: File): ZipStructure {
@@ -158,13 +64,45 @@ object TermuxBootstrapInstaller {
             }
         }
         Log.i(TAG, "First zip entries: ${entries.take(10)}")
-
         return when {
-            entries.any { it.startsWith("data/") }       -> ZipStructure.HAS_DATA_PREFIX
+            entries.any { it.startsWith("data/") } -> ZipStructure.HAS_DATA_PREFIX
             entries.any { it.startsWith("usr/") || it.startsWith("home/") } -> ZipStructure.HAS_USR_PREFIX
-            entries.any { it.startsWith("bin/") || it.startsWith("lib/") || it.startsWith("etc/") } -> ZipStructure.NO_PREFIX
-            else -> ZipStructure.NO_PREFIX  // safe default
+            else -> ZipStructure.NO_PREFIX
         }
+    }
+
+    // ── Download ──────────────────────────────────────────────────────────────
+
+    private fun downloadZip(url: String, dest: File, onPercent: (Int) -> Unit) {
+        Log.i(TAG, "Downloading: $url")
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 20_000
+        conn.readTimeout    = 120_000
+        conn.instanceFollowRedirects = true
+        conn.connect()
+
+        if (conn.responseCode != 200)
+            throw Exception("HTTP ${conn.responseCode} from $url")
+
+        val total = conn.contentLengthLong
+        var downloaded = 0L
+        var lastPct = -1
+
+        conn.inputStream.use { input ->
+            FileOutputStream(dest).use { output ->
+                val buf = ByteArray(16_384)
+                var n: Int
+                while (input.read(buf).also { n = it } != -1) {
+                    output.write(buf, 0, n)
+                    downloaded += n
+                    if (total > 0) {
+                        val pct = (downloaded * 100 / total).toInt()
+                        if (pct != lastPct) { lastPct = pct; onPercent(pct) }
+                    }
+                }
+            }
+        }
+        Log.i(TAG, "Downloaded ${dest.length()} bytes")
     }
 
     // ── Extract ───────────────────────────────────────────────────────────────
@@ -188,7 +126,6 @@ object TermuxBootstrapInstaller {
                     continue
                 }
 
-                // Strip data/data/com.termux/files/ prefix if present
                 val name = when (structure) {
                     ZipStructure.HAS_DATA_PREFIX -> {
                         val marker = "files/"
@@ -205,7 +142,6 @@ object TermuxBootstrapInstaller {
                 }
 
                 val outFile = File(extractTo, name)
-
                 if (entry.isDirectory) {
                     outFile.mkdirs()
                 } else {
@@ -217,7 +153,6 @@ object TermuxBootstrapInstaller {
                     }
                     count++
                 }
-
                 zis.closeEntry()
                 entry = zis.nextEntry
             }
@@ -227,29 +162,18 @@ object TermuxBootstrapInstaller {
 
     // ── Symlinks ──────────────────────────────────────────────────────────────
 
-    /**
-     * SYMLINKS.txt: one line per symlink in format  target←linkpath
-     * Paths are relative to bootstrap root (same as zip entries).
-     */
     private fun createSymlinks(root: File, lines: List<String>) {
         var ok = 0; var fail = 0
         for (line in lines) {
-            // The separator is ← (U+2190, 3 bytes: E2 86 90)
-            val sepIdx = line.indexOf('\u2190')
+            val sepIdx = line.indexOf('\u2190')   // ← character
             if (sepIdx < 0) continue
-
             val target   = line.substring(0, sepIdx).trim()
             val linkPath = line.substring(sepIdx + 1).trim()
             val linkFile = File(root, linkPath)
-
             linkFile.parentFile?.mkdirs()
-
             try {
-                // Remove existing
-                val path = linkFile.toPath()
-                if (java.nio.file.Files.isSymbolicLink(path) || linkFile.exists()) {
+                if (java.nio.file.Files.isSymbolicLink(linkFile.toPath()) || linkFile.exists())
                     linkFile.delete()
-                }
                 val result = ProcessBuilder("ln", "-sf", target, linkFile.absolutePath)
                     .redirectErrorStream(true).start().waitFor()
                 if (result == 0) ok++ else { fail++; Log.w(TAG, "ln failed: $linkPath → $target") }
@@ -258,14 +182,78 @@ object TermuxBootstrapInstaller {
                 Log.w(TAG, "Symlink exception: $linkPath → $target : ${e.message}")
             }
         }
-        Log.i(TAG, "Symlinks done: $ok ok, $fail failed")
+        Log.i(TAG, "Symlinks: $ok ok, $fail failed")
     }
 
     // ── chmod ─────────────────────────────────────────────────────────────────
 
     private fun makeBinariesExecutable(prefix: File) {
-        listOf("bin", "libexec", "lib/apt/methods").forEach { dir ->
+        listOf("bin", "libexec").forEach { dir ->
             File(prefix, dir).listFiles()?.forEach { it.setExecutable(true, false) }
+        }
+    }
+
+    // ── Public install ────────────────────────────────────────────────────────
+    // Declared LAST so all private helpers above are already in scope
+
+    fun install(ctx: Context, onProgress: (Progress) -> Unit) {
+        try {
+            onProgress(Progress(Stage.CHECKING))
+
+            if (isInstalled(ctx)) {
+                Log.i(TAG, "Already installed.")
+                onProgress(Progress(Stage.DONE))
+                return
+            }
+
+            bootstrapRootDir(ctx).deleteRecursively()
+            bootstrapRootDir(ctx).mkdirs()
+
+            val zipFile = File(ctx.cacheDir, "bootstrap-${abi()}.zip")
+
+            downloadZip(bootstrapUrl(), zipFile) { pct: Int ->
+                onProgress(Progress(Stage.DOWNLOADING, pct))
+            }
+            Log.i(TAG, "Zip size: ${zipFile.length()} bytes")
+
+            onProgress(Progress(Stage.EXTRACTING))
+            val structure = detectZipStructure(zipFile)
+            Log.i(TAG, "Structure: $structure")
+
+            val extractRoot = when (structure) {
+                ZipStructure.HAS_USR_PREFIX  -> bootstrapRootDir(ctx)
+                ZipStructure.NO_PREFIX       -> prefixDir(ctx)
+                ZipStructure.HAS_DATA_PREFIX -> bootstrapRootDir(ctx)
+            }
+            extractRoot.mkdirs()
+
+            val symlinkLines = mutableListOf<String>()
+            val fileCount = extractZip(zipFile, extractRoot, structure, symlinkLines)
+            Log.i(TAG, "Extracted $fileCount files into ${extractRoot.absolutePath}")
+            zipFile.delete()
+
+            // Verify
+            val bash = File(prefixDir(ctx), "bin/bash")
+            Log.i(TAG, "bash exists: ${bash.exists()} → ${bash.absolutePath}")
+            if (!bash.exists()) {
+                Log.e(TAG, "Contents after extract:")
+                bootstrapRootDir(ctx).walkTopDown().take(40).forEach { Log.e(TAG, "  $it") }
+                throw Exception("bash not found after extraction (structure=$structure)")
+            }
+
+            onProgress(Progress(Stage.SYMLINKS))
+            createSymlinks(bootstrapRootDir(ctx), symlinkLines)
+            makeBinariesExecutable(prefixDir(ctx))
+
+            homeDir(ctx).mkdirs()
+            File(prefixDir(ctx), "tmp").mkdirs()
+
+            onProgress(Progress(Stage.DONE))
+            Log.i(TAG, "Bootstrap install complete.")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Bootstrap FAILED: ${e.message}", e)
+            onProgress(Progress(Stage.ERROR, error = e))
         }
     }
 
