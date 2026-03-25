@@ -459,7 +459,7 @@ public final class Tools {
         // Extract numeric version (e.g., "26.1" from "26.1 Fabric")
         String numeric = versionId.split(" ")[0];
         try {
-            return VersionNumber.compare(VersionNumber.asVersion(numeric).canonical, "26.1") >= 0;
+            return VersionNumber.compare(numeric, "26.1") >= 0;
         } catch (Exception e) {
             return false;
         }
