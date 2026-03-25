@@ -17,4 +17,4 @@ dependencyResolutionManagement {
 rootProject.name = "YukariLauncher"
 include(":LWJGL:3.3.3")
 include(":LWJGL:3.3.6")
-// include(":YukariLauncher")
+include(":YukariLauncher")
