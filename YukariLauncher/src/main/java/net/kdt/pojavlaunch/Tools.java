@@ -73,8 +73,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.jackhuang.hmcl.util.versioning.VersionNumber;
-
 @SuppressWarnings("IOStreamConstructor")
 public final class Tools {
     public static final String NOTIFICATION_CHANNEL_DEFAULT = "channel_id";
@@ -454,35 +452,17 @@ public final class Tools {
             library.downloads = new DependentLibrary.LibraryDownloads(new MinecraftLibraryArtifact());
     }
 
-    private static boolean shouldIncludeLwjgl(String versionId) {
-        if (versionId == null) return false;
-        // Extract the first token (e.g., "26.1" from "26.1 Fabric")
-        String[] parts = versionId.split(" ");
-        String numeric = parts[0];
-        // Split by dots
-        String[] versionParts = numeric.split("\\.");
-        try {
-            int major = Integer.parseInt(versionParts[0]);
-            int minor = versionParts.length > 1 ? Integer.parseInt(versionParts[1]) : 0;
-            // For 26.1 and above
-            return major > 26 || (major == 26 && minor >= 1);
-        } catch (NumberFormatException e) {
-            return false;
-        }
-    }
-
     public static String[] generateLibClasspath(JMinecraftVersionList.Version info) {
-        boolean includeLwjgl = shouldIncludeLwjgl(info.id);
         List<String> libDir = new ArrayList<>();
         for (DependentLibrary libItem : info.libraries) {
             if (!checkRules(libItem.rules)) continue;
             String libName = libItem.name;
             if (libName == null) continue;
 
-            // Skip LWJGL and related libraries only for older versions
-            if (!includeLwjgl && (libName.contains("org.lwjgl") ||
-                    libName.contains("jinput-platform") ||
-                    libName.contains("twitch-platform"))) {
+            if (libName.contains("org.lwjgl") ||
+                libName.contains("jinput-platform") ||
+                libName.contains("twitch-platform")
+            ) {
                 Logging.d(InfoDistributor.LAUNCHER_NAME, "Ignored unusable dependency: " + libName);
                 continue;
             }
@@ -492,7 +472,6 @@ public final class Tools {
         }
         return libDir.toArray(new String[0]);
     }
-
 
     public static JMinecraftVersionList.Version getVersionInfo(Version version) {
         return getVersionInfo(version, false);
