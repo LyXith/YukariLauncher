@@ -8,13 +8,11 @@ import net.kdt.pojavlaunch.Tools
 import org.apache.commons.io.FileUtils
 import java.io.File
 import java.io.FileInputStream
-import java.io.InputStream
 
 class UnpackComponentsTask(val context: Context, val component: Components) : AbstractUnpackTask() {
     private lateinit var am: AssetManager
     private lateinit var rootDir: String
     private lateinit var versionFile: File
-    private lateinit var input: InputStream
     private var isCheckFailed: Boolean = false
 
     init {
@@ -22,7 +20,7 @@ class UnpackComponentsTask(val context: Context, val component: Components) : Ab
             am = context.assets
             rootDir = if (component.privateDirectory) PathManager.DIR_DATA else PathManager.DIR_GAME_HOME
             versionFile = File("$rootDir/${component.component}/version")
-            input = am.open("components/${component.component}/version")
+            // Just check that the version file exists in assets – we'll read it later
         }.getOrElse {
             isCheckFailed = true
         }
@@ -39,7 +37,8 @@ class UnpackComponentsTask(val context: Context, val component: Components) : Ab
             return true
         } else {
             val fis = FileInputStream(versionFile)
-            val release1 = Tools.read(input)
+            // Read version from assets and from destination
+            val release1 = Tools.read(am.open("components/${component.component}/version"))
             val release2 = Tools.read(fis)
             if (release1 != release2) {
                 requestEmptyParentDir(versionFile)
@@ -53,16 +52,44 @@ class UnpackComponentsTask(val context: Context, val component: Components) : Ab
 
     override fun run() {
         listener?.onTaskStart()
-        val fileList = am.list("components/${component.component}")
-        for (fileName in fileList!!) {
-            Tools.copyAssetFile(context, "components/${component.component}/$fileName", "$rootDir/${component.component}", true)
-        }
+        val assetPath = "components/${component.component}"
+        val destDir = File(rootDir, component.component)
+        // Recursively copy all assets to destination
+        copyAssetsRecursively(am, assetPath, destDir)
         listener?.onTaskEnd()
+    }
+
+    /**
+     * Recursively copies all files from a given asset directory to a destination folder.
+     *
+     * @param assetManager The Android AssetManager.
+     * @param assetPath    The path inside assets (e.g. "components/lwjgl3").
+     * @param destDir      The destination directory (e.g. "/storage/emulated/0/YukariLauncher/lwjgl3").
+     */
+    private fun copyAssetsRecursively(assetManager: AssetManager, assetPath: String, destDir: File) {
+        val entries = assetManager.list(assetPath) ?: return
+        destDir.mkdirs()
+        for (entry in entries) {
+            val srcPath = "$assetPath/$entry"
+            val destFile = File(destDir, entry)
+            val subEntries = assetManager.list(srcPath)
+            if (subEntries != null && subEntries.isNotEmpty()) {
+                // It's a directory – recurse
+                copyAssetsRecursively(assetManager, srcPath, destFile)
+            } else {
+                // It's a file – copy it
+                assetManager.open(srcPath).use { input ->
+                    destFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+        }
     }
 
     private fun requestEmptyParentDir(file: File) {
         file.parentFile!!.apply {
-            if (exists() and isDirectory) {
+            if (exists() && isDirectory) {
                 FileUtils.deleteDirectory(this)
             }
             mkdirs()
