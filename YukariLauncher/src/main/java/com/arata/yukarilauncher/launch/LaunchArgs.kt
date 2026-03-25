@@ -9,6 +9,7 @@ import com.arata.yukarilauncher.feature.version.Version
 import com.arata.yukarilauncher.utils.ZHTools
 import com.arata.yukarilauncher.utils.path.LibPath
 import com.arata.yukarilauncher.utils.path.PathManager
+import com.google.gson.JsonObject
 import net.kdt.pojavlaunch.AWTCanvasView
 import net.kdt.pojavlaunch.JMinecraftVersionList
 import net.kdt.pojavlaunch.Tools
@@ -17,6 +18,7 @@ import net.kdt.pojavlaunch.utils.JSONUtils
 import net.kdt.pojavlaunch.value.MinecraftAccount
 import org.jackhuang.hmcl.util.versioning.VersionNumber
 import java.io.File
+import java.io.FileReader
 
 class LaunchArgs(
     private val account: MinecraftAccount,
@@ -33,16 +35,7 @@ class LaunchArgs(
         argsList.addAll(getJavaArgs())
         argsList.addAll(getMinecraftJVMArgs())
         argsList.add("-cp")
-
-        val isMinecraft26_1OrHigher = isVersion26_1OrHigher(versionInfo)
-        val classpath = if (isMinecraft26_1OrHigher) {
-            // For 26.1+, use only the game's own libraries (which include the correct LWJGL)
-            launchClassPath
-        } else {
-            // For older versions, prepend our bundled LWJGL 3.3.3
-            "${getLWJGL3ClassPath(versionInfo)}:$launchClassPath"
-        }
-        argsList.add(classpath)
+        argsList.add("${getLWJGL3ClassPath()}:$launchClassPath")
 
         if (runtime.javaVersion > 8) {
             argsList.add("--add-exports")
@@ -57,27 +50,41 @@ class LaunchArgs(
     }
 
     /**
-     * Checks if the Minecraft version is 26.1 or higher.
-     * Handles version strings like "26.1", "26.1 Fabric", "26.1.1", etc.
+     * Returns the effective Minecraft version ID (e.g., "26.1") from the VersionInfo.json file,
+     * or falls back to the version info ID if not found.
      */
-    private fun isVersion26_1OrHigher(versionInfo: JMinecraftVersionList.Version): Boolean {
-        val versionId = versionInfo.id ?: "0.0"
-        // Extract the numeric part (e.g., "26.1" from "26.1 Fabric")
-        val numericVersion = versionId.split(" ").firstOrNull() ?: versionId
-        return try {
-            VersionNumber.compare(VersionNumber.asVersion(numericVersion).canonical, "26.1") >= 0
-        } catch (e: Exception) {
-            false
+    private fun getEffectiveMinecraftVersion(): String {
+        // The VersionInfo.json is typically located at:
+        // gameDirPath/YukariLauncher/VersionInfo.json
+        val versionInfoFile = File(gameDirPath, "YukariLauncher/VersionInfo.json")
+        if (versionInfoFile.exists()) {
+            try {
+                FileReader(versionInfoFile).use { reader ->
+                    val json = Tools.GLOBAL_GSON.fromJson(reader, JsonObject::class.java)
+                    val mcVersion = json.get("minecraftVersion")?.asString
+                    if (!mcVersion.isNullOrEmpty()) {
+                        return mcVersion
+                    }
+                }
+            } catch (e: Exception) {
+                // Fall back to versionInfo.id
+            }
         }
+        // Fall back to versionInfo.id (may include loader like "26.1 Fabric")
+        return versionInfo.id ?: "0.0"
     }
 
     /**
      * Returns the LWJGL classpath appropriate for the given Minecraft version.
      * Uses LWJGL 3.3.6 for versions >= 26.1, otherwise LWJGL 3.3.3.
-     * Note: This method is still called for older versions; for 26.1+ it is not used in the classpath.
      */
-    private fun getLWJGL3ClassPath(versionInfo: JMinecraftVersionList.Version): String {
-        val version = if (isVersion26_1OrHigher(versionInfo)) "3.3.6" else "3.3.3"
+    private fun getLWJGL3ClassPath(): String {
+        val effectiveVersion = getEffectiveMinecraftVersion()
+        val useLWJGL3_3_6 = VersionNumber.compare(
+            VersionNumber.asVersion(effectiveVersion).canonical,
+            "26.1"
+        ) >= 0
+        val version = if (useLWJGL3_3_6) "3.3.6" else "3.3.3"
         return Tools.getLWJGL3ClassPath(version)
     }
 
@@ -99,11 +106,25 @@ class LaunchArgs(
         val configFilePath = if (is7) LibPath.LOG4J_XML_1_7 else LibPath.LOG4J_XML_1_12
         argsList.add("-Dlog4j.configurationFile=${configFilePath.absolutePath}")
 
-        val versionSpecificNativesDir = File(PathManager.DIR_CACHE, "natives/${minecraftVersion.getVersionName()}")
-        if (versionSpecificNativesDir.exists()) {
+        // Version-specific natives directory
+        // Use effective version for the directory name (to avoid conflicts with loaders)
+        val effectiveVersion = getEffectiveMinecraftVersion()
+        val versionSpecificNativesDir = File(PathManager.DIR_CACHE, "natives/$effectiveVersion")
+        if (versionSpecificNativesDir.exists() || versionSpecificNativesDir.mkdirs()) {
             val dirPath = versionSpecificNativesDir.absolutePath
-//            argsList.add("-Djava.library.path=$dirPath:${PathManager.DIR_NATIVE_LIB}")
+            // For LWJGL: set extraction and loading path
+            argsList.add("-Dorg.lwjgl.librarypath=$dirPath")
+            // Also set general library path, with the version-specific dir first
+            argsList.add("-Djava.library.path=$dirPath:${PathManager.DIR_NATIVE_LIB}")
+            // Keep JNA boot path (used for other libraries)
             argsList.add("-Djna.boot.library.path=$dirPath")
+        } else {
+            // Fallback to original behavior
+            val oldVersionSpecificNativesDir = File(PathManager.DIR_CACHE, "natives/${minecraftVersion.getVersionName()}")
+            if (oldVersionSpecificNativesDir.exists()) {
+                val dirPath = oldVersionSpecificNativesDir.absolutePath
+                argsList.add("-Djna.boot.library.path=$dirPath")
+            }
         }
 
         return argsList
@@ -111,11 +132,6 @@ class LaunchArgs(
 
     private fun getMinecraftJVMArgs(): Array<String> {
         val versionInfo = Tools.getVersionInfo(minecraftVersion, true)
-
-//        // Parse Forge 1.17+ additional JVM Arguments
-//        if (versionInfo.inheritsFrom == null || versionInfo.arguments == null || versionInfo.arguments.jvm == null) {
-//            return emptyArray()
-//        }
 
         val varArgMap: MutableMap<String, String?> = android.util.ArrayMap()
         varArgMap["classpath_separator"] = ":"
