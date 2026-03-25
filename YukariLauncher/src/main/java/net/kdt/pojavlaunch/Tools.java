@@ -456,15 +456,21 @@ public final class Tools {
 
     private static boolean shouldIncludeLwjgl(String versionId) {
         if (versionId == null) return false;
-        // Extract numeric version (e.g., "26.1" from "26.1 Fabric")
-        String numeric = versionId.split(" ")[0];
+        // Extract the first token (e.g., "26.1" from "26.1 Fabric")
+        String[] parts = versionId.split(" ");
+        String numeric = parts[0];
+        // Split by dots
+        String[] versionParts = numeric.split("\\.");
         try {
-            return VersionNumber.compare(numeric, "26.1") >= 0;
-        } catch (Exception e) {
+            int major = Integer.parseInt(versionParts[0]);
+            int minor = versionParts.length > 1 ? Integer.parseInt(versionParts[1]) : 0;
+            // For 26.1 and above
+            return major > 26 || (major == 26 && minor >= 1);
+        } catch (NumberFormatException e) {
             return false;
         }
     }
-    
+
     public static String[] generateLibClasspath(JMinecraftVersionList.Version info) {
         boolean includeLwjgl = shouldIncludeLwjgl(info.id);
         List<String> libDir = new ArrayList<>();
