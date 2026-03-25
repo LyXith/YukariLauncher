@@ -158,6 +158,17 @@ public final class Tools {
         return new File(version.getVersionPath(), version.getVersionName() + ".jar").getAbsolutePath();
     }
 
+
+    private static boolean shouldIncludeLwjgl(String versionId) {
+        if (versionId == null) return false;
+        // Extract numeric version (e.g., "26.1" from "26.1 Fabric")
+        String numeric = versionId.split(" ")[0];
+        try {
+            return VersionNumber.compare(VersionNumber.asVersion(numeric).canonical, "26.1") >= 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
     // ---------- LWJGL3 classpath methods ----------
     /**
      * Returns the LWJGL classpath using the default version (3.3.3).
@@ -453,16 +464,17 @@ public final class Tools {
     }
 
     public static String[] generateLibClasspath(JMinecraftVersionList.Version info) {
+        boolean includeLwjgl = shouldIncludeLwjgl(info.id);
         List<String> libDir = new ArrayList<>();
         for (DependentLibrary libItem : info.libraries) {
             if (!checkRules(libItem.rules)) continue;
             String libName = libItem.name;
             if (libName == null) continue;
 
-            if (libName.contains("org.lwjgl") ||
-                libName.contains("jinput-platform") ||
-                libName.contains("twitch-platform")
-            ) {
+            // Skip LWJGL and related libraries only for older versions
+            if (!includeLwjgl && (libName.contains("org.lwjgl") ||
+                    libName.contains("jinput-platform") ||
+                    libName.contains("twitch-platform"))) {
                 Logging.d(InfoDistributor.LAUNCHER_NAME, "Ignored unusable dependency: " + libName);
                 continue;
             }
@@ -472,7 +484,7 @@ public final class Tools {
         }
         return libDir.toArray(new String[0]);
     }
-
+    
     public static JMinecraftVersionList.Version getVersionInfo(Version version) {
         return getVersionInfo(version, false);
     }

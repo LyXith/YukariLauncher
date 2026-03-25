@@ -33,7 +33,16 @@ class LaunchArgs(
         argsList.addAll(getJavaArgs())
         argsList.addAll(getMinecraftJVMArgs())
         argsList.add("-cp")
-        argsList.add("${getLWJGL3ClassPath(versionInfo)}:$launchClassPath")
+
+        val isMinecraft26_1OrHigher = isVersion26_1OrHigher(versionInfo)
+        val classpath = if (isMinecraft26_1OrHigher) {
+            // For 26.1+, use only the game's own libraries (which include the correct LWJGL)
+            launchClassPath
+        } else {
+            // For older versions, prepend our bundled LWJGL 3.3.3
+            "${getLWJGL3ClassPath(versionInfo)}:$launchClassPath"
+        }
+        argsList.add(classpath)
 
         if (runtime.javaVersion > 8) {
             argsList.add("--add-exports")
@@ -48,17 +57,27 @@ class LaunchArgs(
     }
 
     /**
+     * Checks if the Minecraft version is 26.1 or higher.
+     * Handles version strings like "26.1", "26.1 Fabric", "26.1.1", etc.
+     */
+    private fun isVersion26_1OrHigher(versionInfo: JMinecraftVersionList.Version): Boolean {
+        val versionId = versionInfo.id ?: "0.0"
+        // Extract the numeric part (e.g., "26.1" from "26.1 Fabric")
+        val numericVersion = versionId.split(" ").firstOrNull() ?: versionId
+        return try {
+            VersionNumber.compare(VersionNumber.asVersion(numericVersion).canonical, "26.1") >= 0
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
      * Returns the LWJGL classpath appropriate for the given Minecraft version.
      * Uses LWJGL 3.3.6 for versions >= 26.1, otherwise LWJGL 3.3.3.
+     * Note: This method is still called for older versions; for 26.1+ it is not used in the classpath.
      */
     private fun getLWJGL3ClassPath(versionInfo: JMinecraftVersionList.Version): String {
-        val minecraftVersionId = versionInfo.id ?: "0.0"
-        val useLWJGL3_3_6 = VersionNumber.compare(
-            VersionNumber.asVersion(minecraftVersionId).canonical,
-            "26.1"
-        ) >= 0
-
-        val version = if (useLWJGL3_3_6) "3.3.6" else "3.3.3"
+        val version = if (isVersion26_1OrHigher(versionInfo)) "3.3.6" else "3.3.3"
         return Tools.getLWJGL3ClassPath(version)
     }
 
