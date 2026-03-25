@@ -9,7 +9,7 @@ enum class Jre(val jreName: String, val jrePath: String, val summary: Int) {
     JRE_21("Internal-21", "components/jre-21", R.string.splash_screen_jre21),
     JRE_25("Internal-25", "components/jre-25", R.string.splash_screen_jre25)
 =======
-    JRE_21("Internal-21", "components/jre-21", R.string.splash_screen_jre21)
+    JRE_21("Internal-21", "components/jre-21", R.string.splash_screen_jre21),
     JRE_25("Internal-215", "components/jre-25", R.string.splash_screen_jre25)
 >>>>>>> 3ab52bee (lwjgl)
 }
