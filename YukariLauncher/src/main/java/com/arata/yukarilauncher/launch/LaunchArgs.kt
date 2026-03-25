@@ -68,7 +68,7 @@ class LaunchArgs(
         val versionSpecificNativesDir = File(PathManager.DIR_CACHE, "natives/${minecraftVersion.getVersionName()}")
         if (versionSpecificNativesDir.exists()) {
             val dirPath = versionSpecificNativesDir.absolutePath
-            argsList.add("-Djava.library.path=$dirPath:${PathManager.DIR_NATIVE_LIB}")
+//            argsList.add("-Djava.library.path=$dirPath:${PathManager.DIR_NATIVE_LIB}")
             argsList.add("-Djna.boot.library.path=$dirPath")
         }
 
