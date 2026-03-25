@@ -73,6 +73,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import org.jackhuang.hmcl.util.versioning.VersionNumber;
+
 @SuppressWarnings("IOStreamConstructor")
 public final class Tools {
     public static final String NOTIFICATION_CHANNEL_DEFAULT = "channel_id";
@@ -158,17 +160,6 @@ public final class Tools {
         return new File(version.getVersionPath(), version.getVersionName() + ".jar").getAbsolutePath();
     }
 
-
-    private static boolean shouldIncludeLwjgl(String versionId) {
-        if (versionId == null) return false;
-        // Extract numeric version (e.g., "26.1" from "26.1 Fabric")
-        String numeric = versionId.split(" ")[0];
-        try {
-            return VersionNumber.compare(VersionNumber.asVersion(numeric).canonical, "26.1") >= 0;
-        } catch (Exception e) {
-            return false;
-        }
-    }
     // ---------- LWJGL3 classpath methods ----------
     /**
      * Returns the LWJGL classpath using the default version (3.3.3).
@@ -463,6 +454,17 @@ public final class Tools {
             library.downloads = new DependentLibrary.LibraryDownloads(new MinecraftLibraryArtifact());
     }
 
+    private static boolean shouldIncludeLwjgl(String versionId) {
+        if (versionId == null) return false;
+        // Extract numeric version (e.g., "26.1" from "26.1 Fabric")
+        String numeric = versionId.split(" ")[0];
+        try {
+            return VersionNumber.compare(VersionNumber.asVersion(numeric).canonical, "26.1") >= 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
     public static String[] generateLibClasspath(JMinecraftVersionList.Version info) {
         boolean includeLwjgl = shouldIncludeLwjgl(info.id);
         List<String> libDir = new ArrayList<>();
@@ -484,7 +486,8 @@ public final class Tools {
         }
         return libDir.toArray(new String[0]);
     }
-    
+
+
     public static JMinecraftVersionList.Version getVersionInfo(Version version) {
         return getVersionInfo(version, false);
     }
