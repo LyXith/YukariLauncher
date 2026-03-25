@@ -33,7 +33,7 @@ class LaunchArgs(
         argsList.addAll(getJavaArgs())
         argsList.addAll(getMinecraftJVMArgs())
         argsList.add("-cp")
-        argsList.add("${Tools.getLWJGL3ClassPath()}:$launchClassPath")
+        argsList.add("${getLWJGL3ClassPath(versionInfo)}:$launchClassPath")
 
         if (runtime.javaVersion > 8) {
             argsList.add("--add-exports")
@@ -45,6 +45,21 @@ class LaunchArgs(
         argsList.addAll(getMinecraftClientArgs())
 
         return argsList
+    }
+
+    /**
+     * Returns the LWJGL classpath appropriate for the given Minecraft version.
+     * Uses LWJGL 3.3.6 for versions >= 26.1, otherwise LWJGL 3.3.3.
+     */
+    private fun getLWJGL3ClassPath(versionInfo: JMinecraftVersionList.Version): String {
+        val minecraftVersionId = versionInfo.id ?: "0.0"
+        val useLWJGL3_3_6 = VersionNumber.compare(
+            VersionNumber.asVersion(minecraftVersionId).canonical,
+            "26.1"
+        ) >= 0
+
+        val version = if (useLWJGL3_3_6) "3.3.6" else "3.3.3"
+        return Tools.getLWJGL3ClassPath(version)
     }
 
     private fun getJavaArgs(): List<String> {
