@@ -31,8 +31,7 @@ jobs:
         run: |
           chmod +x gradlew
           mkdir out
-          ./gradlew LWJGL:3.3.3:build --no-daemon
-          ./gradlew LWJGL:3.3.6:build --no-daemon
+          ./gradlew LWJGL:build --no-daemon
 
       - name: Build Debug ${{matrix.arch}}
         run: |
