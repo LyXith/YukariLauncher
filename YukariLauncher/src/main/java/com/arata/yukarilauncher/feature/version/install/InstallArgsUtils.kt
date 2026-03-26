@@ -43,7 +43,7 @@ class InstallArgsUtils(private val mcVersion: String, private val loaderVersion:
     fun setNeoForge(intent: Intent, jarFile: File, customName: String) {
         forgeLikeCustomVersionName(jarFile, customName)
 
-       val args = "-jar ${jarFile.absolutePath} --installClient \"${ProfilePathHome.getGameHome()}\""
+        val args = "-jar ${jarFile.absolutePath} --installClient \"${ProfilePathHome.getGameHome()}\""
         intent.putExtra("javaArgs", args)
         intent.putExtra(JavaGUILauncherActivity.SUBSCRIBE_JVM_EXIT_EVENT, true)
         intent.putExtra(JavaGUILauncherActivity.FORCE_SHOW_LOG, true)
