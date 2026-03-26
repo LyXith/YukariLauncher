@@ -260,7 +260,7 @@
                     android:layout_centerVertical="true" />
             </com.arata.yukarilauncher.ui.layout.AnimRelativeLayout>
 
-            <com.movtery.zalithlauncher.ui.layout.AnimRelativeLayout
+            <com.arata.yukarilauncher.ui.layout.AnimRelativeLayout
                 android:id="@+id/force_gui_input_layout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -286,7 +286,7 @@
                     android:layout_height="wrap_content"
                     android:layout_alignParentEnd="true"
                     android:layout_centerVertical="true" />
-            </com.movtery.zalithlauncher.ui.layout.AnimRelativeLayout>
+            </com.arata.yukarilauncher.ui.layout.AnimRelativeLayout>
 
             <com.arata.yukarilauncher.ui.layout.AnimRelativeLayout
                 android:id="@+id/disableDoubleTap_layout"
