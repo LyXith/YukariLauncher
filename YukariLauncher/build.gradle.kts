@@ -28,7 +28,7 @@ val getBuildType = {
 }
 
 val nameId = "com.arata.yukarilauncher"
-val generatedZalithDir = file("$buildDir/generated/source/zalith/java")
+val generatedYukariDir = file("$buildDir/generated/source/yukari/java")
 val launcherAPPName = project.findProperty("launcher_app_name") as? String ?: error("The \"launcher_app_name\" property is not set in gradle.properties.")
 val launcherName = project.findProperty("launcher_name") as? String ?: error("The \"launcher_name\" property is not set in gradle.properties.")
 val launcherVersionCode = (project.findProperty("launcher_version_code") as? String)?.toIntOrNull() ?: error("The \"launcher_version_code\" property is not set as an integer in gradle.properties.")
@@ -107,7 +107,7 @@ android {
         }
     }
 
-    sourceSets["main"].java.srcDirs(generatedZalithDir)
+    sourceSets["main"].java.srcDirs(generatedYukariDir)
 
     androidComponents {
         onVariants { variant ->
@@ -220,7 +220,7 @@ tasks.register("generateInfoDistributor") {
             "APP_NAME" to project.property("launcher_app_name").toString(),
             "BUILD_TYPE" to getBuildType()
         )
-        generateJavaClass(generatedZalithDir, "com.arata.yukarilauncher", "InfoDistributor", constantMap)
+        generateJavaClass(generatedYukariDir, "com.arata.yukarilauncher", "InfoDistributor", constantMap)
     }
 }
 
@@ -272,7 +272,7 @@ dependencies {
 
     // implementation("net.sourceforge.streamsupport:streamsupport-cfuture:1.7.0")
 
-    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.commonmark:commonmark:0.19.0")

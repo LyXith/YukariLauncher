@@ -94,7 +94,7 @@ class Version(
 
     fun getVersionInfo(): VersionInfo? {
         return runCatching {
-            val infoFile = File(VersionsManager.getZalithVersionPath(this), "VersionInfo.json")
+            val infoFile = File(VersionsManager.getYukariVersionPath(this), "VersionInfo.json")
             Tools.GLOBAL_GSON.fromJson(Tools.read(infoFile), VersionInfo::class.java)
         }.getOrElse { null }
     }

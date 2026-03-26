@@ -119,7 +119,7 @@ object VersionsManager {
             val jsonFile = File(versionFile, "${versionFile.name}.json")
             if (jsonFile.exists() && jsonFile.isFile) {
                 isVersion = true
-                val versionInfoFile = File(getZalithVersionPath(versionFile), "VersionInfo.json")
+                val versionInfoFile = File(getYukariVersionPath(versionFile), "VersionInfo.json")
                 if (refreshVersionInfo) FileUtils.deleteQuietly(versionInfoFile)
                 if (!versionInfoFile.exists()) {
                     VersionInfoUtils.parseJson(jsonFile)?.save(versionFile)
@@ -173,29 +173,29 @@ object VersionsManager {
         versionName?.let { name -> versions.any { it.getVersionName() == name } } ?: false
 
     /**
-     * @return 获取 Zalith 启动器版本标识文件夹
+     * @return 获取 Yukari 启动器版本标识文件夹
      */
-    fun getZalithVersionPath(version: Version) = File(version.getVersionPath(), InfoDistributor.LAUNCHER_NAME)
+    fun getYukariVersionPath(version: Version) = File(version.getVersionPath(), InfoDistributor.LAUNCHER_NAME)
 
     /**
-     * @return 通过目录获取 Zalith 启动器版本标识文件夹
+     * @return 通过目录获取 Yukari 启动器版本标识文件夹
      */
-    fun getZalithVersionPath(folder: File) = File(folder, InfoDistributor.LAUNCHER_NAME)
+    fun getYukariVersionPath(folder: File) = File(folder, InfoDistributor.LAUNCHER_NAME)
 
     /**
-     * @return 通过名称获取 Zalith 启动器版本标识文件夹
+     * @return 通过名称获取 Yukari 启动器版本标识文件夹
      */
-    fun getZalithVersionPath(name: String) = File(getVersionPath(name), InfoDistributor.LAUNCHER_NAME)
+    fun getYukariVersionPath(name: String) = File(getVersionPath(name), InfoDistributor.LAUNCHER_NAME)
 
     /**
      * @return 获取当前版本设置的图标
      */
-    fun getVersionIconFile(version: Version) = File(getZalithVersionPath(version), "VersionIcon.png")
+    fun getVersionIconFile(version: Version) = File(getYukariVersionPath(version), "VersionIcon.png")
 
     /**
      * @return 通过名称获取当前版本设置的图标
      */
-    fun getVersionIconFile(name: String) = File(getZalithVersionPath(name), "VersionIcon.png")
+    fun getVersionIconFile(name: String) = File(getYukariVersionPath(name), "VersionIcon.png")
 
     /**
      * @return 通过名称获取版本的文件夹路径

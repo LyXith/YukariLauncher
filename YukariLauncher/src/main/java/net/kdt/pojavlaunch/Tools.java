@@ -45,7 +45,6 @@ import com.arata.yukarilauncher.utils.runtime.SelectRuntimeUtils;
 import com.arata.yukarilauncher.utils.stringutils.StringUtils;
 
 import net.kdt.pojavlaunch.fragments.MainMenuFragment;
-import net.kdt.pojavlaunch.lifecycle.ContextAwareDoneListener;
 import net.kdt.pojavlaunch.lifecycle.ContextExecutorTask;
 import net.kdt.pojavlaunch.memory.MemoryHoleFinder;
 import net.kdt.pojavlaunch.memory.SelfMapsParser;
@@ -158,21 +157,9 @@ public final class Tools {
         return new File(version.getVersionPath(), version.getVersionName() + ".jar").getAbsolutePath();
     }
 
-    // ---------- LWJGL3 classpath methods ----------
-    /**
-     * Returns the LWJGL classpath using the default version (3.3.3).
-     */
     public static String getLWJGL3ClassPath() {
-        return getLWJGL3ClassPath("3.3.3");
-    }
-
-    /**
-     * Returns the LWJGL classpath for a specific version (e.g. "3.3.3" or "3.3.6").
-     * Looks in the subfolder lwjgl3/<version>/
-     */
-    public static String getLWJGL3ClassPath(String version) {
         StringBuilder libStr = new StringBuilder();
-        File lwjgl3Folder = new File(PathManager.DIR_GAME_HOME, "lwjgl3/" + version);
+        File lwjgl3Folder = new File(PathManager.DIR_GAME_HOME, "lwjgl3");
         File[] lwjgl3Files = lwjgl3Folder.listFiles();
         if (lwjgl3Files != null) {
             for (File file: lwjgl3Files) {
@@ -181,10 +168,8 @@ public final class Tools {
                 }
             }
         }
-        // Remove the trailing colon if there were any jars
-        if (libStr.length() > 0) {
-            libStr.setLength(libStr.length() - 1);
-        }
+        // Remove the ':' at the end
+        libStr.setLength(libStr.length() - 1);
         return libStr.toString();
     }
 
@@ -456,6 +441,7 @@ public final class Tools {
         List<String> libDir = new ArrayList<>();
         for (DependentLibrary libItem : info.libraries) {
             if (!checkRules(libItem.rules)) continue;
+
             String libName = libItem.name;
             if (libName == null) continue;
 
@@ -466,6 +452,7 @@ public final class Tools {
                 Logging.d(InfoDistributor.LAUNCHER_NAME, "Ignored unusable dependency: " + libName);
                 continue;
             }
+
             String libArtifactPath = artifactToPath(libItem);
             if (libArtifactPath == null) continue;
             libDir.add(ProfilePathHome.getLibrariesHome() + "/" + libArtifactPath);

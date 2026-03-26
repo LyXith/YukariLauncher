@@ -6,7 +6,7 @@ import android.os.Parcelable
 import com.google.gson.JsonParser
 import com.arata.yukarilauncher.R
 import com.arata.yukarilauncher.feature.log.Logging
-import com.arata.yukarilauncher.feature.version.VersionsManager.getZalithVersionPath
+import com.arata.yukarilauncher.feature.version.VersionsManager.getYukariVersionPath
 import com.arata.yukarilauncher.setting.AllSettings
 import com.arata.yukarilauncher.utils.stringutils.StringUtils.getStringNotNull
 import net.kdt.pojavlaunch.Tools
@@ -66,9 +66,9 @@ class VersionConfig(private var versionPath: File) : Parcelable {
     @Throws(Throwable::class)
     fun saveWithThrowable() {
         Logging.i("Save Version Config", "Trying to save: $this")
-        val zalithVersionPath = getZalithVersionPath(versionPath)
-        val configFile = File(zalithVersionPath, "VersionConfig.json")
-        if (!zalithVersionPath.exists()) zalithVersionPath.mkdirs()
+        val yukariVersionPath = getYukariVersionPath(versionPath)
+        val configFile = File(yukariVersionPath, "VersionConfig.json")
+        if (!yukariVersionPath.exists()) yukariVersionPath.mkdirs()
 
         FileWriter(configFile, false).use {
             val json = Tools.GLOBAL_GSON.toJson(this)
@@ -169,8 +169,8 @@ class VersionConfig(private var versionPath: File) : Parcelable {
         @JvmStatic
         fun parseConfig(versionPath: File): VersionConfig {
             //兼容旧版本的版本隔离文件（识别并保存为新版本后，旧的版本隔离文件将被删除）
-            val oldConfigFile = File(getZalithVersionPath(versionPath), "ZalithVersion.cfg")
-            val configFile = File(getZalithVersionPath(versionPath), "VersionConfig.json")
+            val oldConfigFile = File(getYukariVersionPath(versionPath), "YukariVersion.cfg")
+            val configFile = File(getYukariVersionPath(versionPath), "VersionConfig.json")
 
             return runCatching getConfig@{
                 if (oldConfigFile.exists()) {

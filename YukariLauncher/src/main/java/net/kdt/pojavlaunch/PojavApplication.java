@@ -34,7 +34,7 @@ import java.util.Date;
 import java.util.Objects;
 
 public class PojavApplication extends Application {
-	public static final String CRASH_REPORT_TAG = "ZalithCrashReport";
+	public static final String CRASH_REPORT_TAG = "YukariCrashReport";
 
 	@Override
 	public void onCreate() {

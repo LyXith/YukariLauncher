@@ -17,7 +17,7 @@ import java.io.FileInputStream
 import java.util.zip.ZipFile
 
 /**
- * FCL、ZalithLauncher 渲染器插件，同时支持使用本地渲染器插件
+ * FCL、YukariLauncher 渲染器插件，同时支持使用本地渲染器插件
  * [FCL Renderer Plugin](https://github.com/FCL-Team/FCLRendererPlugin)
  */
 object RendererPluginManager {
@@ -89,14 +89,14 @@ object RendererPluginManager {
     }
 
     /**
-     * 解析 ZalithLauncher、FCL 渲染器插件
+     * 解析 YukariLauncher、FCL 渲染器插件
      */
     fun parseApkPlugin(context: Context, info: ApplicationInfo) {
         if (info.flags and ApplicationInfo.FLAG_SYSTEM == 0) {
             val metaData = info.metaData ?: return
             if (
                 metaData.getBoolean("fclPlugin", false) ||
-                metaData.getBoolean("zalithRendererPlugin", false)
+                metaData.getBoolean("yukariRendererPlugin", false)
             ) {
                 val rendererString = metaData.getString("renderer") ?: return
                 val des = metaData.getString("des") ?: return

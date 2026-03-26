@@ -49,9 +49,9 @@ class VersionInfo(
 
     fun save(versionFolder: File) {
         runCatching {
-            val zalithVersionPath = VersionsManager.getZalithVersionPath(versionFolder)
-            val infoFile = File(zalithVersionPath, "VersionInfo.json")
-            if (!zalithVersionPath.exists()) zalithVersionPath.mkdirs()
+            val yukariVersionPath = VersionsManager.getYukariVersionPath(versionFolder)
+            val infoFile = File(yukariVersionPath, "VersionInfo.json")
+            if (!yukariVersionPath.exists()) yukariVersionPath.mkdirs()
 
             FileWriter(infoFile, false).use {
                 val json = Tools.GLOBAL_GSON.toJson(this)
