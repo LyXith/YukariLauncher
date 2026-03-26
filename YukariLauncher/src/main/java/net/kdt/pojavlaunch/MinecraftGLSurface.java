@@ -427,7 +427,7 @@ public class MinecraftGLSurface extends View implements GrabListener {
     public void refreshTouchProcessor() {
         post(() -> updateGrabState(CallbackBridge.isGrabbing()));
     }
-    
+
     /** A small interface called when the listener is ready for the first time */
     public interface SurfaceReadyListener {
         void isReady();

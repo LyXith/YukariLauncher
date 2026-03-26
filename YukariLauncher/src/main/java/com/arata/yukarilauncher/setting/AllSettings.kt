@@ -52,7 +52,7 @@ class AllSettings {
 
         @JvmStatic
         val forceGuiInput = BooleanSettingUnit("forceGuiInput", false)
-        
+
         @JvmStatic
         val timeLongPressTrigger = IntSettingUnit("timeLongPressTrigger", 300)
 
