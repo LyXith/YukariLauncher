@@ -149,6 +149,10 @@ class LaunchGame {
                     ControllerProxy.startProxy(activity)
                     AllStaticSettings.useControllerProxy = true
                 }
+
+                if (modCheckResult.hasSodiumOrEmbeddium) {
+                    Logger.appendToLog("Mod Perception: Sodium or Embeddium Mod found, attempting to load the disable warning tool later!")
+                }
             }
 
             JREUtils.redirectAndPrintJRELog()

@@ -12,13 +12,7 @@ class VulkanZinkRenderer : RendererInterface {
     override fun getRendererEnv(): Lazy<Map<String, String>> = lazy {
         mapOf(
             "MESA_GL_VERSION_OVERRIDE" to "4.6",
-            "MESA_GLSL_VERSION_OVERRIDE" to "460",
-            "MESA_GLES_VERSION_OVERRIDE" to "3.3",
-            "MESA_GLSL_CACHE_DIR" to "/data/data/com.arata.yukarilauncher/cache", // writable cache
-            "MESA_GLSL_FORCE_COMPILER" to "1",    // use LLVM
-            "MESA_VK_THREAD_SUBMIT" to "1",       // Vulkan multithreaded submit
-            "ZINK_USE_THREADED_CMDBUF" to "1",    // optional, improves multithreaded GL
-            "MESA_SHADER_CACHE_DISABLE" to "0"    // ensure caching is enabled
+            "MESA_GLSL_VERSION_OVERRIDE" to "460"
         )
     }
 
