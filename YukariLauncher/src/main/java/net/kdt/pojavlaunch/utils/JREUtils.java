@@ -199,7 +199,7 @@ public final class JREUtils {
         if (runtimeModDir != null) {
             ldLibraryPath.append(runtimeModDir.getAbsolutePath()).append(":");
         }
-        if (DIR_MOD_LIBRARY != null && !DIR_MOD_LIBRARY.isEmpty()) {
+        if (!DIR_MOD_LIBRARY.isEmpty()) {
             ldLibraryPath.append(DIR_MOD_LIBRARY).append(":");
         }
         ldLibraryPath.append(DIR_NATIVE_LIB);
