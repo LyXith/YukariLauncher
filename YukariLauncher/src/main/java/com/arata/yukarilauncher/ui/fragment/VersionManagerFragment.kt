@@ -121,40 +121,50 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                         .showDialog()
                 }
 
-                // ✅ Corrected update checker handler
                 checkUpdates -> {
                     try {
-                        val modsDir = File(gameDir, "mods").mustExists()
-                        val installedMods = InstalledModsScanner.scan(modsDir)
+                        val modsDir = File(gameDir, "mods").apply {
+                            if (!exists()) mkdirs()
+                        }
+                
+                        // Scan mods (wrap in try-catch to avoid file access issues)
+                        val installedMods = runCatching {
+                            InstalledModsScanner.scan(modsDir)
+                        }.getOrElse { e ->
+                            println("Failed to scan mods: ${e.message}")
+                            emptyList()
+                        }
+                
                         val updates = mutableListOf<ModUpdate>()
-
+                
                         installedMods.forEach { mod ->
-                            try {
+                            runCatching {
                                 val update = when (mod.loader.lowercase()) {
                                     "fabric" -> ModrinthUpdateHelper.checkUpdate(mod.modId, mod.version)
                                     "forge", "neoforge" -> CurseForgeUpdateHelper.checkUpdate(mod.modId, mod.version)
                                     else -> null
                                 }
                                 if (update?.needsUpdate == true) updates.add(update)
-                            } catch (e: Exception) {
+                            }.onFailure { e ->
                                 println("⚠️ Failed to check ${mod.modName}: ${e.message}")
                             }
                         }
-
+                
                         if (updates.isEmpty()) {
                             Tools.showError(activity, "✅ All mods are up to date!", Exception(""))
                         } else {
-                            updates.forEach {
-                                try {
-                                    ModDownloader.download(it.downloadUrl, "${it.modName}-${it.latestVersion}.jar", gameDir)
-                                    println("⬇️ Updated ${it.modName} to ${it.latestVersion}")
-                                } catch (e: Exception) {
-                                    println("⚠️ Failed to update ${it.modName}: ${e.message}")
+                            updates.forEach { update ->
+                                runCatching {
+                                    val fileName = "${update.modName}-${update.latestVersion}.jar".replace("/", "_")
+                                    ModDownloader.download(update.downloadUrl, fileName, gameDir)
+                                    println("⬇️ Updated ${update.modName} to ${update.latestVersion}")
+                                }.onFailure { e ->
+                                    println("⚠️ Failed to update ${update.modName}: ${e.message}")
                                 }
                             }
                             Tools.showError(activity, "⬇️ Updated ${updates.size} mods successfully!", Exception(""))
                         }
-                    } catch (e: Exception) {
+                    } catch (e: Throwable) {
                         e.printStackTrace()
                         Tools.showError(activity, "❌ Mod update check failed:\n${e.message ?: "Unknown error"}", e)
                     }
