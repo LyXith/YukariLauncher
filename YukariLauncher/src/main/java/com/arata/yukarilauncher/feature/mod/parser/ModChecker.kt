@@ -227,12 +227,9 @@ class ModChecker {
                         Logging.i("Axiom", "Attempting to download $libFileName from $url")
                         Logging.i("Axiom", "Target library path: ${PathManager.DIR_MOD_LIBRARY}")
 
-                        // Prepare a latch to wait for download completion
-                        val latch = java.util.concurrent.CountDownLatch(1)
-                        var error: String? = null
-
-                        // Run the download on a background thread
-                        TaskExecutors.getBackgroundExecutor().execute {
+                        // Use a single‑thread executor to offload network work
+                        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+                        val future = executor.submit {
                             try {
                                 // Show progress on UI thread
                                 TaskExecutors.runInUIThread {
@@ -254,27 +251,33 @@ class ModChecker {
                                     }
                                 }
 
-                                // Success
+                                // Success – clear progress on UI thread
                                 TaskExecutors.runInUIThread {
                                     com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
                                 }
                                 Logging.i("Axiom", "Successfully downloaded $libFileName")
+                                null
                             } catch (e: Exception) {
                                 Logging.e("Axiom", "Failed to download $libFileName", e)
                                 TaskExecutors.runInUIThread {
                                     com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
                                 }
                                 val errorDetail = "${e.javaClass.simpleName}: ${e.message ?: "No message"}"
-                                error = context.getString(R.string.mod_check_axiom_failed, modFile.name) + "\n" +
+                                context.getString(R.string.mod_check_axiom_failed, modFile.name) + "\n" +
                                         context.getString(R.string.mod_check_axiom_debug, errorDetail)
-                            } finally {
-                                latch.countDown()
                             }
                         }
 
-                        // Wait for the background task to complete
-                        latch.await()
-                        return error
+                        // Shut down the executor and wait for the result
+                        executor.shutdown()
+                        val errorMessage = try {
+                            future.get() // blocks until the task completes
+                        } catch (e: Exception) {
+                            // If getting the result fails, we still need to handle it
+                            context.getString(R.string.mod_check_axiom_failed, modFile.name) + "\n" +
+                                    context.getString(R.string.mod_check_axiom_debug, "Unexpected error: ${e.message}")
+                        }
+                        return errorMessage
                     }
                     break
                 }
