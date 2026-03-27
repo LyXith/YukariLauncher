@@ -8,9 +8,13 @@ import com.arata.yukarilauncher.R
 import com.arata.yukarilauncher.feature.log.Logging
 import com.arata.yukarilauncher.task.TaskExecutors
 import com.arata.yukarilauncher.ui.dialog.TipDialog
+import com.arata.yukarilauncher.utils.path.PathManager
 import net.kdt.pojavlaunch.Architecture
 import net.kdt.pojavlaunch.Logger
 import net.kdt.pojavlaunch.plugins.FFmpegPlugin
+import java.io.File
+import java.net.URL
+import java.util.zip.ZipFile
 
 class ModChecker {
     class ModCheckResult() : Parcelable {
@@ -61,6 +65,8 @@ class ModChecker {
             }
         }
     }
+
+    private val AXIOM_ZSTD_BASE_URL = "https://github.com/Shiraishi-Arata/Yukari-Fixes/raw/754245229e1653af17a65850c93691620bffd98c/Axiom/zstd/aarch64/"
 
     /**
      * 检查所有模组，并对一些已知的模组进行判断
@@ -172,6 +178,15 @@ class ModChecker {
                         }
                     }
                 }
+
+                if (mod.file.name.matches(Regex("Axiom-.*\\.jar", RegexOption.IGNORE_CASE))) {
+                    if (!handleAxiom(context, mod.file)) {
+                        modCheckSettings[AllModCheckSettings.AXIOM] = Pair(
+                            "1",
+                            context.getString(R.string.mod_check_axiom_failed, mod.file.name)
+                        )
+                    }
+                }
             }
 
             showResultDialog(context, modCheckSettings) {
@@ -181,6 +196,59 @@ class ModChecker {
             Logging.e("LaunchGame", "An error occurred while trying to process existing mod information", e)
             executeTask(null)
         }
+    }
+
+    private fun handleAxiom(context: Context, modFile: File): Boolean {
+        ZipFile(modFile).use { zipFile ->
+            val entries = zipFile.entries()
+            while (entries.hasMoreElements()) {
+                val entry = entries.nextElement()
+                val name = entry.name
+                // Look for a .so file containing "zstd-jni-" and likely in a linux/aarch path
+                if (name.contains("zstd-jni-") && name.endsWith(".so") &&
+                    (name.contains("linux") || name.contains("aarch") || name.contains("arm64"))
+                ) {
+                    val versionStart = "zstd-jni-"
+                    val versionEnd = ".so"
+                    val startIndex = name.indexOf(versionStart) + versionStart.length
+                    val endIndex = name.indexOf(versionEnd, startIndex)
+                    if (startIndex >= 0 && endIndex > startIndex) {
+                        val version = name.substring(startIndex, endIndex)
+                        val libFileName = "zstd-jni-$version.so"
+                        val targetFile = File(PathManager.DIR_MOD_LIBRARY, libFileName)
+                        if (targetFile.exists()) {
+                            return true
+                        }
+                        val url = "$AXIOM_ZSTD_BASE_URL$libFileName"
+                        try {
+                            // Show progress (using existing INSTALL_RESOURCE progress layout)
+                            com.kdt.mcgui.ProgressLayout.setProgress(
+                                com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE,
+                                0,
+                                R.string.mod_check_axiom_downloading,
+                                libFileName
+                            )
+                            val connection = URL(url).openConnection()
+                            connection.connect()
+                            connection.getInputStream().use { input ->
+                                targetFile.parentFile?.mkdirs()
+                                targetFile.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
+                            return true
+                        } catch (e: Exception) {
+                            Logging.e("Axiom", "Failed to download $libFileName", e)
+                            com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
+                            return false
+                        }
+                    }
+                    break
+                }
+            }
+        }
+        return true
     }
 
     private fun showResultDialog(

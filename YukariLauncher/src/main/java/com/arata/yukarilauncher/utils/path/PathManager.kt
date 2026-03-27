@@ -21,7 +21,7 @@ class PathManager {
         lateinit var DIR_CACHE_STRING: String
         lateinit var DIR_ADDONS_INFO_CACHE: String
         @JvmField var DIR_RUNTIME_MOD: File? = null
-        @JvmField lateinit var DIR_MOD_LIBRARY: String
+        @JvmField var DIR_MOD_LIBRARY: String = ""
 
         lateinit var DIR_CUSTOM_MOUSE: String
         lateinit var DIR_BACKGROUND: File
