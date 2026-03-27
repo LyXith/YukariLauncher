@@ -204,9 +204,8 @@ class ModChecker {
             while (entries.hasMoreElements()) {
                 val entry = entries.nextElement()
                 val name = entry.name
-                // Look for a .so file containing "zstd-jni-" and likely in a linux/aarch path
                 if (name.contains("zstd-jni-") && name.endsWith(".so") &&
-                    (name.contains("linux") || name.contains("aarch") || name.contains("arm64"))
+                    (name.contains("linux") || name.contains("aarch64") || name.contains("arm64"))
                 ) {
                     val versionStart = "zstd-jni-"
                     val versionEnd = ".so"
