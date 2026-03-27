@@ -1,6 +1,7 @@
 package com.arata.yukarilauncher.feature.mod.parser
 
 import android.content.Context
+import android.os.Looper
 import android.os.Parcel
 import android.os.Parcelable
 import com.mio.util.AndroidUtil
@@ -179,6 +180,7 @@ class ModChecker {
                     }
                 }
 
+                // Axiom mod detection (by filename pattern)
                 if (mod.file.name.matches(Regex("Axiom-.*\\.jar", RegexOption.IGNORE_CASE))) {
                     val errorMessage = handleAxiom(context, mod.file)
                     if (errorMessage != null) {
@@ -216,7 +218,6 @@ class ModChecker {
                         val libFileName = "libzstd-jni-$version.so"
                         val targetFile = File(PathManager.DIR_MOD_LIBRARY, libFileName)
 
-                        // Check if already exists
                         if (targetFile.exists()) {
                             Logging.i("Axiom", "Library already exists: $targetFile")
                             return null
@@ -225,40 +226,62 @@ class ModChecker {
                         val url = "$AXIOM_ZSTD_BASE_URL$libFileName"
                         Logging.i("Axiom", "Attempting to download $libFileName from $url")
                         Logging.i("Axiom", "Target library path: ${PathManager.DIR_MOD_LIBRARY}")
-                        try {
-                            com.kdt.mcgui.ProgressLayout.setProgress(
-                                com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE,
-                                0,
-                                R.string.mod_check_axiom_downloading,
-                                libFileName
-                            )
-                            val connection = URL(url).openConnection()
-                            connection.setRequestProperty("User-Agent", "YukariLauncher")
-                            connection.connect()
-                            connection.getInputStream().use { input ->
-                                targetFile.parentFile?.mkdirs()
-                                targetFile.outputStream().use { output ->
-                                    input.copyTo(output)
+
+                        // Prepare a latch to wait for download completion
+                        val latch = java.util.concurrent.CountDownLatch(1)
+                        var error: String? = null
+
+                        // Run the download on a background thread
+                        TaskExecutors.getBackgroundExecutor().execute {
+                            try {
+                                // Show progress on UI thread
+                                TaskExecutors.runInUIThread {
+                                    com.kdt.mcgui.ProgressLayout.setProgress(
+                                        com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE,
+                                        0,
+                                        R.string.mod_check_axiom_downloading,
+                                        libFileName
+                                    )
                                 }
+
+                                val connection = URL(url).openConnection()
+                                connection.setRequestProperty("User-Agent", "YukariLauncher")
+                                connection.connect()
+                                connection.getInputStream().use { input ->
+                                    targetFile.parentFile?.mkdirs()
+                                    targetFile.outputStream().use { output ->
+                                        input.copyTo(output)
+                                    }
+                                }
+
+                                // Success
+                                TaskExecutors.runInUIThread {
+                                    com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
+                                }
+                                Logging.i("Axiom", "Successfully downloaded $libFileName")
+                            } catch (e: Exception) {
+                                Logging.e("Axiom", "Failed to download $libFileName", e)
+                                TaskExecutors.runInUIThread {
+                                    com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
+                                }
+                                val errorDetail = "${e.javaClass.simpleName}: ${e.message ?: "No message"}"
+                                error = context.getString(R.string.mod_check_axiom_failed, modFile.name) + "\n" +
+                                        context.getString(R.string.mod_check_axiom_debug, errorDetail)
+                            } finally {
+                                latch.countDown()
                             }
-                            com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
-                            Logging.i("Axiom", "Successfully downloaded $libFileName")
-                            return null
-                        } catch (e: Exception) {
-                            Logging.e("Axiom", "Failed to download $libFileName", e)  // logs full stack trace
-                            com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
-                            val errorDetail = "${e.javaClass.simpleName}: ${e.message ?: "No message"}"
-                            return context.getString(R.string.mod_check_axiom_failed, modFile.name) + "\n" +
-                                    context.getString(R.string.mod_check_axiom_debug, errorDetail)
                         }
+
+                        // Wait for the background task to complete
+                        latch.await()
+                        return error
                     }
                     break
                 }
             }
         }
-        
         return context.getString(R.string.mod_check_axiom_failed, modFile.name) + "\n" +
-                context.getString(R.string.mod_check_axiom_debug, "No suitable native library found in JAR (aarch64/arm64 entry with libzstd-jni missing)")
+                context.getString(R.string.mod_check_axiom_debug, "No suitable native library found in JAR")
     }
 
     private fun showResultDialog(
