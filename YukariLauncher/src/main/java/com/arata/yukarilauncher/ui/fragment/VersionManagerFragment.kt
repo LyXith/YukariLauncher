@@ -5,6 +5,8 @@ import android.widget.Toast
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AlertDialog.Builder
 import com.arata.anim.AnimPlayer
 import com.arata.anim.animations.Animations
 import com.arata.yukarilauncher.R
@@ -147,8 +149,8 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                                         else -> null
                                     }
                                     if (update?.needsUpdate == true) updates.add(update)
-                                }.onFailure {
-                                    Logging.e("ModUpdate", "Failed to check ${mod.modName}: ${it.message}", it)
+                                }.onFailure { e ->
+                                    Logging.e("ModUpdate", "Failed to check ${mod.modName}: ${e.message}", e)
                                 }
                             }
 
@@ -167,8 +169,8 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                                                     runCatching {
                                                         val fileName = "${update.modName}-${update.latestVersion}.jar".replace("/", "_")
                                                         ModDownloader.download(update.downloadUrl, fileName, gameDir)
-                                                    }.onFailure {
-                                                        Logging.e("ModUpdate", "Failed to download ${update.modName}: ${it.message}", it)
+                                                    }.onFailure { e ->
+                                                        Logging.e("ModUpdate", "Failed to download ${update.modName}: ${e.message}", e)
                                                     }
                                                 }
                                                 TaskExecutors.runInUIThread {
