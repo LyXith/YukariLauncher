@@ -256,7 +256,7 @@ class ModChecker {
                                     com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
                                 }
                                 Logging.i("Axiom", "Successfully downloaded $libFileName")
-                                null
+                                null // success
                             } catch (e: Exception) {
                                 Logging.e("Axiom", "Failed to download $libFileName", e)
                                 TaskExecutors.runInUIThread {
@@ -270,11 +270,11 @@ class ModChecker {
 
                         // Shut down the executor and wait for the result
                         executor.shutdown()
-                        val errorMessage = try {
-                            future.get() // blocks until the task completes
+                        var errorMessage: String? = null
+                        try {
+                            errorMessage = future.get() // returns String? (null on success)
                         } catch (e: Exception) {
-                            // If getting the result fails, we still need to handle it
-                            context.getString(R.string.mod_check_axiom_failed, modFile.name) + "\n" +
+                            errorMessage = context.getString(R.string.mod_check_axiom_failed, modFile.name) + "\n" +
                                     context.getString(R.string.mod_check_axiom_debug, "Unexpected error: ${e.message}")
                         }
                         return errorMessage
