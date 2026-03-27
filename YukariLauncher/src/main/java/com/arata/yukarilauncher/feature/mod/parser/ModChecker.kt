@@ -224,6 +224,7 @@ class ModChecker {
 
                         val url = "$AXIOM_ZSTD_BASE_URL$libFileName"
                         Logging.i("Axiom", "Attempting to download $libFileName from $url")
+                        Logging.i("Axiom", "Target library path: ${PathManager.DIR_MOD_LIBRARY}")
                         try {
                             com.kdt.mcgui.ProgressLayout.setProgress(
                                 com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE,
@@ -244,10 +245,11 @@ class ModChecker {
                             Logging.i("Axiom", "Successfully downloaded $libFileName")
                             return null
                         } catch (e: Exception) {
-                            Logging.e("Axiom", "Failed to download $libFileName: ${e.message}")
+                            Logging.e("Axiom", "Failed to download $libFileName", e)  // logs full stack trace
                             com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
+                            val errorDetail = "${e.javaClass.simpleName}: ${e.message ?: "No message"}"
                             return context.getString(R.string.mod_check_axiom_failed, modFile.name) + "\n" +
-                                    context.getString(R.string.mod_check_axiom_debug, e.message ?: "Unknown error")
+                                    context.getString(R.string.mod_check_axiom_debug, errorDetail)
                         }
                     }
                     break
