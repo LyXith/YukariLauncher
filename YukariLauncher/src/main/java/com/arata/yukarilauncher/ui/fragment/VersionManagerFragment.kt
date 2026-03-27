@@ -122,58 +122,82 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                 }
 
                 checkUpdates -> {
-                    try {
-                        val modsDir = File(gameDir, "mods").apply {
-                            if (!exists()) mkdirs()
-                        }
+                    // Disable the button briefly to prevent multiple clicks
+                    binding.checkUpdates.isEnabled = false
 
-                        // Scan installed mods
-                        val installedMods = runCatching { InstalledModsScanner.scan(modsDir) }
-                            .getOrElse {
-                                Tools.showError(activity, "Failed to scan mods: ${it.message ?: "Unknown error"}", it)
-                                return@apply
+                    // Show a progress indicator (optional)
+                    val progressLayout = ProgressLayout.showProgress(activity, R.string.mod_update_checking)
+
+                    TaskExecutors.getBackgroundExecutor().execute {
+                        try {
+                            val modsDir = File(gameDir, "mods").apply {
+                                if (!exists()) mkdirs()
                             }
 
-                        val updates = mutableListOf<ModUpdate>()
+                            // Scan installed mods
+                            val installedMods = runCatching { InstalledModsScanner.scan(modsDir) }
+                                .getOrElse { emptyList() }
 
-                        // Check each mod for updates
-                        installedMods.forEach { mod ->
-                            runCatching {
-                                val update = when (mod.loader.lowercase()) {
-                                    "fabric" -> ModrinthUpdateHelper.checkUpdate(mod.modId, mod.version)
-                                    "forge", "neoforge" -> CurseForgeUpdateHelper.checkUpdate(mod.modId, mod.version)
-                                    else -> null
-                                }
-                                if (update?.needsUpdate == true) updates.add(update)
-                            }.onFailure {
-                                // Log error but continue checking other mods
-                                android.util.Log.e("ModUpdate", "Failed to check ${mod.modName}: ${it.message}", it)
-                            }
-                        }
+                            val updates = mutableListOf<ModUpdate>()
 
-                        // Show results
-                        if (updates.isEmpty()) {
-                            // Use a toast for success message (no exception needed)
-                            android.widget.Toast.makeText(activity, "All mods are up to date!", android.widget.Toast.LENGTH_LONG).show()
-                        } else {
-                            // Download updates
-                            updates.forEach { update ->
+                            // Check each mod for updates
+                            installedMods.forEach { mod ->
                                 runCatching {
-                                    val fileName = "${update.modName}-${update.latestVersion}.jar".replace("/", "_")
-                                    ModDownloader.download(update.downloadUrl, fileName, gameDir)
+                                    val update = when (mod.loader.lowercase()) {
+                                        "fabric" -> ModrinthUpdateHelper.checkUpdate(mod.modId, mod.version)
+                                        "forge", "neoforge" -> CurseForgeUpdateHelper.checkUpdate(mod.modId, mod.version)
+                                        else -> null
+                                    }
+                                    if (update?.needsUpdate == true) updates.add(update)
                                 }.onFailure {
-                                    android.util.Log.e("ModUpdate", "Failed to download ${update.modName}: ${it.message}", it)
+                                    Logging.e("ModUpdate", "Failed to check ${mod.modName}: ${it.message}", it)
                                 }
                             }
-                            // Show success toast
-                            android.widget.Toast.makeText(activity, "Updated ${updates.size} mods", android.widget.Toast.LENGTH_LONG).show()
+
+                            // Switch to main thread to show results
+                            TaskExecutors.runInUIThread {
+                                progressLayout?.clear()
+                                binding.checkUpdates.isEnabled = true
+
+                                if (updates.isEmpty()) {
+                                    Toast.makeText(activity, R.string.mod_update_all_up_to_date, Toast.LENGTH_LONG).show()
+                                } else {
+                                    // Show dialog with list of updates
+                                    val message = updates.joinToString("\n") { "${it.modName} → ${it.latestVersion}" }
+                                    AlertDialog.Builder(activity)
+                                        .setTitle(R.string.mod_update_available)
+                                        .setMessage(message)
+                                        .setPositiveButton(R.string.mod_update_all) { _, _ ->
+                                            // Download updates in background
+                                            TaskExecutors.getBackgroundExecutor().execute {
+                                                updates.forEach { update ->
+                                                    runCatching {
+                                                        val fileName = "${update.modName}-${update.latestVersion}.jar".replace("/", "_")
+                                                        ModDownloader.download(update.downloadUrl, fileName, gameDir)
+                                                    }.onFailure {
+                                                        Logging.e("ModUpdate", "Failed to download ${update.modName}: ${it.message}", it)
+                                                    }
+                                                }
+                                                TaskExecutors.runInUIThread {
+                                                    Toast.makeText(activity, R.string.mod_update_completed, Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        }
+                                        .setNegativeButton(R.string.generic_cancel, null)
+                                        .show()
+                                }
+                            }
+                        } catch (e: Throwable) {
+                            Logging.e("ModUpdate", "Update check failed", e)
+                            TaskExecutors.runInUIThread {
+                                progressLayout?.clear()
+                                binding.checkUpdates.isEnabled = true
+                                Tools.showError(activity, "Mod update check failed: ${e.message ?: "Unknown error"}", e)
+                            }
                         }
-                    } catch (e: Throwable) {
-                        e.printStackTrace()
-                        Tools.showError(activity, "Mod update check failed: ${e.message ?: "Unknown error"}", e)
                     }
                 }
-
+                
                 else -> {}
             }
         }
