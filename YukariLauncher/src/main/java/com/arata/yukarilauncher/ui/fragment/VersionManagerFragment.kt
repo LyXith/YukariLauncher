@@ -1,6 +1,7 @@
 package com.arata.yukarilauncher.ui.fragment
 
 import android.os.Bundle
+import android.widget.Toast
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,6 +17,7 @@ import com.arata.yukarilauncher.feature.download.platform.modrinth.update.Modrin
 import com.arata.yukarilauncher.feature.download.platform.update.InstalledModsScanner
 import com.arata.yukarilauncher.feature.download.platform.update.ModDownloader
 import com.arata.yukarilauncher.feature.download.platform.update.ModUpdate
+import com.arata.yukarilauncher.feature.log.Logging
 import com.arata.yukarilauncher.task.Task
 import com.arata.yukarilauncher.task.TaskExecutors
 import com.arata.yukarilauncher.ui.dialog.TipDialog
