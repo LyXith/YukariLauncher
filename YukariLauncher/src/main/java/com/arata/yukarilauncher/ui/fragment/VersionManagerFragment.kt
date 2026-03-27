@@ -19,6 +19,7 @@ import com.arata.yukarilauncher.feature.log.Logging
 import com.arata.yukarilauncher.feature.version.NoVersionException
 import com.arata.yukarilauncher.feature.version.Version
 import com.arata.yukarilauncher.feature.version.VersionsManager
+import com.arata.yukarilauncher.task.Task
 import com.arata.yukarilauncher.task.TaskExecutors
 import com.arata.yukarilauncher.ui.dialog.TipDialog
 import com.arata.yukarilauncher.utils.ZHTools
@@ -57,7 +58,7 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
             versionRename.setOnClickListener(fragment)
             versionCopy.setOnClickListener(fragment)
             versionDelete.setOnClickListener(fragment)
-            checkUpdates.setOnClickListener(fragment) // ✅ correct button ID
+            checkUpdates.setOnClickListener(fragment)
         }
     }
 
@@ -113,15 +114,16 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                             FileDeletionHandler(
                                 activity,
                                 listOf(version.getVersionPath()),
-                                TaskExecutors.getDefault().execute {
+                                Task.runTask {
                                     VersionsManager.refresh("VersionManagerFragment:versionDelete")
-                                }.also { /* no return needed */ }
+                                }.ended(TaskExecutors.getAndroidUI()) {
+                                    Tools.backToMainMenu(activity)
+                                }
                             ).start()
                         }
                         .showDialog()
                 }
 
-                // ✅ Corrected update checker
                 checkUpdates -> {
                     binding.checkUpdates.isEnabled = false
                     val toast = Toast.makeText(activity, "Checking for updates...", Toast.LENGTH_SHORT)
