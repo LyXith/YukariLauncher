@@ -1,26 +1,24 @@
 package com.arata.yukarilauncher.ui.fragment
 
 import android.os.Bundle
-import android.widget.Toast
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AlertDialog.Builder
 import com.arata.anim.AnimPlayer
 import com.arata.anim.animations.Animations
 import com.arata.yukarilauncher.R
 import com.arata.yukarilauncher.databinding.FragmentVersionManagerBinding
-import com.arata.yukarilauncher.feature.version.NoVersionException
-import com.arata.yukarilauncher.feature.version.Version
-import com.arata.yukarilauncher.feature.version.VersionsManager
 import com.arata.yukarilauncher.feature.download.platform.curseforge.update.CurseForgeUpdateHelper
 import com.arata.yukarilauncher.feature.download.platform.modrinth.update.ModrinthUpdateHelper
 import com.arata.yukarilauncher.feature.download.platform.update.InstalledModsScanner
 import com.arata.yukarilauncher.feature.download.platform.update.ModDownloader
 import com.arata.yukarilauncher.feature.download.platform.update.ModUpdate
 import com.arata.yukarilauncher.feature.log.Logging
-import com.arata.yukarilauncher.task.Task
+import com.arata.yukarilauncher.feature.version.NoVersionException
+import com.arata.yukarilauncher.feature.version.Version
+import com.arata.yukarilauncher.feature.version.VersionsManager
 import com.arata.yukarilauncher.task.TaskExecutors
 import com.arata.yukarilauncher.ui.dialog.TipDialog
 import com.arata.yukarilauncher.utils.ZHTools
@@ -59,7 +57,7 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
             versionRename.setOnClickListener(fragment)
             versionCopy.setOnClickListener(fragment)
             versionDelete.setOnClickListener(fragment)
-            checkUpdates.setOnClickListener(fragment)
+            checkUpdates.setOnClickListener(fragment) // ✅ correct button ID
         }
     }
 
@@ -115,49 +113,83 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                             FileDeletionHandler(
                                 activity,
                                 listOf(version.getVersionPath()),
-                                Task.runTask {
+                                TaskExecutors.getDefault().execute {
                                     VersionsManager.refresh("VersionManagerFragment:versionDelete")
-                                }.ended(TaskExecutors.getAndroidUI()) {
-                                    Tools.backToMainMenu(activity)
-                                }
+                                }.also { /* no return needed */ }
                             ).start()
                         }
                         .showDialog()
                 }
 
+                // ✅ Corrected update checker
                 checkUpdates -> {
                     binding.checkUpdates.isEnabled = false
                     val toast = Toast.makeText(activity, "Checking for updates...", Toast.LENGTH_SHORT)
                     toast.show()
 
-                    val minecraftVersion = version.getVersionName() // or version.getVersionInfo()?.id
-                    ModUpdateChecker.checkUpdatesAsync(File(gameDir, "mods"), minecraftVersion) { updates ->
-                        binding.checkUpdates.isEnabled = true
-                        toast.cancel()
-                        if (updates.isEmpty()) {
-                            Toast.makeText(activity, "All mods are up to date!", Toast.LENGTH_LONG).show()
-                        } else {
-                            AlertDialog.Builder(activity)
-                                .setTitle("Mod Updates Available")
-                                .setMessage(updates.joinToString("\n") { "${it.modName} → ${it.latestVersion}" })
-                                .setPositiveButton("Update All") { _, _ ->
-                                    // Download updates (use background thread)
-                                    TaskExecutors.getDefault().execute {
-                                        updates.forEach { update ->
-                                            runCatching {
-                                                val fileName = "${update.modName}-${update.latestVersion}.jar".replace("/", "_")
-                                                ModDownloader.download(update.downloadUrl, fileName, gameDir)
-                                            }.onFailure { e ->
-                                                Logging.e("ModUpdate", "Failed to download ${update.modName}: ${e.message}", e)
+                    TaskExecutors.getDefault().execute {
+                        try {
+                            val modsDir = File(gameDir, "mods").apply {
+                                if (!exists()) mkdirs()
+                            }
+
+                            val minecraftVersion = version.getVersionName()
+
+                            val installedMods = runCatching { InstalledModsScanner.scan(modsDir) }
+                                .getOrElse { emptyList() }
+
+                            val updates = mutableListOf<ModUpdate>()
+
+                            installedMods.forEach { mod ->
+                                runCatching {
+                                    val update = when (mod.loader.lowercase()) {
+                                        "fabric" -> ModrinthUpdateHelper.checkUpdate(mod.modId, mod.version, minecraftVersion, mod.loader.lowercase())
+                                        "forge", "neoforge" -> CurseForgeUpdateHelper.checkUpdate(mod.modId, mod.version, minecraftVersion)
+                                        else -> null
+                                    }
+                                    if (update?.needsUpdate == true) updates.add(update)
+                                }.onFailure { e ->
+                                    Logging.e("ModUpdate", "Failed to check ${mod.modName}: ${e.message}", e)
+                                }
+                            }
+
+                            TaskExecutors.runInUIThread {
+                                binding.checkUpdates.isEnabled = true
+                                toast.cancel()
+                                if (updates.isEmpty()) {
+                                    Toast.makeText(activity, "All mods are up to date!", Toast.LENGTH_LONG).show()
+                                } else {
+                                    AlertDialog.Builder(activity)
+                                        .setTitle("Mod Updates Available")
+                                        .setMessage(updates.joinToString(separator = "\n") { update: ModUpdate ->
+                                            "${update.modName} → ${update.latestVersion}"
+                                        })
+                                        .setPositiveButton("Update All") { _, _ ->
+                                            TaskExecutors.getDefault().execute {
+                                                updates.forEach { update: ModUpdate ->
+                                                    runCatching {
+                                                        val fileName = "${update.modName}-${update.latestVersion}.jar".replace("/", "_")
+                                                        ModDownloader.download(update.downloadUrl, fileName, gameDir)
+                                                    }.onFailure { e ->
+                                                        Logging.e("ModUpdate", "Failed to download ${update.modName}: ${e.message}", e)
+                                                    }
+                                                }
+                                                TaskExecutors.runInUIThread {
+                                                    Toast.makeText(activity, "Updates completed", Toast.LENGTH_LONG).show()
+                                                }
                                             }
                                         }
-                                        TaskExecutors.runInUIThread {
-                                            Toast.makeText(activity, "Updates completed", Toast.LENGTH_LONG).show()
-                                        }
-                                    }
+                                        .setNegativeButton("Cancel", null)
+                                        .show()
                                 }
-                                .setNegativeButton("Cancel", null)
-                                .show()
+                            }
+                        } catch (e: Throwable) {
+                            Logging.e("ModUpdate", "Update check failed", e)
+                            TaskExecutors.runInUIThread {
+                                binding.checkUpdates.isEnabled = true
+                                toast.cancel()
+                                Tools.showError(activity, "Mod update check failed: ${e.message ?: "Unknown error"}", e)
+                            }
                         }
                     }
                 }
