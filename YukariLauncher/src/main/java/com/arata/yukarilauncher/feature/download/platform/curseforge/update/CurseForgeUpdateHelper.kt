@@ -15,9 +15,10 @@ object CurseForgeUpdateHelper {
         if (file.exists()) file.readText().trim() else ""
     }
 
-    fun checkUpdate(modId: String, currentVersion: String): ModUpdate? {
+    fun checkUpdate(modId: String, currentVersion: String, minecraftVersion: String): ModUpdate? {
+        val url = "$BASE_URL/mods/$modId/files?gameVersion=$minecraftVersion"
         val request = Request.Builder()
-            .url("$BASE_URL/mods/$modId/files")
+            .url(url)
             .addHeader("x-api-key", API_KEY)
             .build()
 

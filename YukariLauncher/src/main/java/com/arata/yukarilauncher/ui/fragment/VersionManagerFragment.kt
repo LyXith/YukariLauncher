@@ -136,6 +136,9 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                                 if (!exists()) mkdirs()
                             }
 
+                            // Get the current Minecraft version
+                            val minecraftVersion = version.getVersionName() // or version.getVersionInfo()?.id – whichever gives the correct MC version
+
                             val installedMods = runCatching { InstalledModsScanner.scan(modsDir) }
                                 .getOrElse { emptyList() }
 
@@ -144,8 +147,8 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                             installedMods.forEach { mod ->
                                 runCatching {
                                     val update = when (mod.loader.lowercase()) {
-                                        "fabric" -> ModrinthUpdateHelper.checkUpdate(mod.modId, mod.version)
-                                        "forge", "neoforge" -> CurseForgeUpdateHelper.checkUpdate(mod.modId, mod.version)
+                                        "fabric" -> ModrinthUpdateHelper.checkUpdate(mod.modId, mod.version, minecraftVersion, mod.loader.lowercase())
+                                        "forge", "neoforge" -> CurseForgeUpdateHelper.checkUpdate(mod.modId, mod.version, minecraftVersion)
                                         else -> null
                                     }
                                     if (update?.needsUpdate == true) updates.add(update)
