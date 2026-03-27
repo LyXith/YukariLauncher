@@ -1,6 +1,7 @@
 package net.kdt.pojavlaunch.utils;
 
 import static com.arata.yukarilauncher.utils.path.PathManager.DIR_NATIVE_LIB;
+import static com.arata.yukarilauncher.utils.path.PathManager.DIR_MOD_LIBRARY; // NEW: import custom mod lib path
 import static net.kdt.pojavlaunch.Architecture.ARCH_X86;
 import static net.kdt.pojavlaunch.Architecture.is64BitsDevice;
 import static net.kdt.pojavlaunch.Tools.currentDisplayMetrics;
@@ -198,6 +199,9 @@ public final class JREUtils {
         if (runtimeModDir != null) {
             ldLibraryPath.append(runtimeModDir.getAbsolutePath()).append(":");
         }
+        if (DIR_MOD_LIBRARY != null && !DIR_MOD_LIBRARY.isEmpty()) {
+            ldLibraryPath.append(DIR_MOD_LIBRARY).append(":");
+        }
         ldLibraryPath.append(DIR_NATIVE_LIB);
         LD_LIBRARY_PATH = ldLibraryPath.toString();
     }
@@ -257,7 +261,7 @@ public final class JREUtils {
         if (RendererPluginManager.getSelectedRendererPlugin() != null) return;
 
         if (!rendererId.startsWith("opengles")) {
-            envMap.put("MESA_LOADER_DRIVER_OVERRIDE", "zink"); 
+            envMap.put("MESA_LOADER_DRIVER_OVERRIDE", "zink");
             envMap.put("LIBGL_ES", "3.3");
             envMap.put("LIBGL_VERSION_OVERRIDE", "4.5");
             envMap.put("MESA_GLSL_VERSION_OVERRIDE", "450");
@@ -333,7 +337,7 @@ public final class JREUtils {
                 setRendererEnv(envMap);
             }
 
-            envMap.put("ZALITH_VERSION_CODE", String.valueOf(ZHTools.getVersionCode()));
+            envMap.put("YUKARI_VERSION_CODE", String.valueOf(ZHTools.getVersionCode()));
         }
 
         for (Map.Entry<String, String> env : envMap.entrySet()) {

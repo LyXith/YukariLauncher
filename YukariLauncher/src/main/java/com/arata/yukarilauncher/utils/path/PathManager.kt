@@ -21,6 +21,7 @@ class PathManager {
         lateinit var DIR_CACHE_STRING: String
         lateinit var DIR_ADDONS_INFO_CACHE: String
         @JvmField var DIR_RUNTIME_MOD: File? = null
+        @JvmField lateinit var DIR_MOD_LIBRARY: String
 
         lateinit var DIR_CUSTOM_MOUSE: String
         lateinit var DIR_BACKGROUND: File
@@ -41,6 +42,7 @@ class PathManager {
             DIR_DATA = DIR_FILE.getParent()!!
             DIR_CACHE = context.cacheDir
             DIR_MULTIRT_HOME = "$DIR_DATA/runtimes"
+            DIR_MOD_LIBRARY = "$DIR_DATA/libs"
             DIR_GAME_HOME = getExternalStorageRoot(context).absolutePath
             DIR_LAUNCHER_LOG = "$DIR_GAME_HOME/launcher_log"
             DIR_CTRLMAP_PATH = "$DIR_GAME_HOME/controlmap"
