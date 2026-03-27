@@ -122,25 +122,21 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                 }
 
                 checkUpdates -> {
-                    // Disable the button briefly to prevent multiple clicks
                     binding.checkUpdates.isEnabled = false
+                    val toast = Toast.makeText(activity, "Checking for updates...", Toast.LENGTH_SHORT)
+                    toast.show()
 
-                    // Show a progress indicator (optional)
-                    val progressLayout = ProgressLayout.showProgress(activity, R.string.mod_update_checking)
-
-                    TaskExecutors.getBackgroundExecutor().execute {
+                    TaskExecutors.getDefault().execute {
                         try {
                             val modsDir = File(gameDir, "mods").apply {
                                 if (!exists()) mkdirs()
                             }
 
-                            // Scan installed mods
                             val installedMods = runCatching { InstalledModsScanner.scan(modsDir) }
                                 .getOrElse { emptyList() }
 
                             val updates = mutableListOf<ModUpdate>()
 
-                            // Check each mod for updates
                             installedMods.forEach { mod ->
                                 runCatching {
                                     val update = when (mod.loader.lowercase()) {
@@ -154,22 +150,17 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                                 }
                             }
 
-                            // Switch to main thread to show results
                             TaskExecutors.runInUIThread {
-                                progressLayout?.clear()
                                 binding.checkUpdates.isEnabled = true
-
+                                toast.cancel()
                                 if (updates.isEmpty()) {
-                                    Toast.makeText(activity, R.string.mod_update_all_up_to_date, Toast.LENGTH_LONG).show()
+                                    Toast.makeText(activity, "All mods are up to date!", Toast.LENGTH_LONG).show()
                                 } else {
-                                    // Show dialog with list of updates
-                                    val message = updates.joinToString("\n") { "${it.modName} → ${it.latestVersion}" }
                                     AlertDialog.Builder(activity)
-                                        .setTitle(R.string.mod_update_available)
-                                        .setMessage(message)
-                                        .setPositiveButton(R.string.mod_update_all) { _, _ ->
-                                            // Download updates in background
-                                            TaskExecutors.getBackgroundExecutor().execute {
+                                        .setTitle("Mod Updates Available")
+                                        .setMessage(updates.joinToString("\n") { "${it.modName} → ${it.latestVersion}" })
+                                        .setPositiveButton("Update All") { _, _ ->
+                                            TaskExecutors.getDefault().execute {
                                                 updates.forEach { update ->
                                                     runCatching {
                                                         val fileName = "${update.modName}-${update.latestVersion}.jar".replace("/", "_")
@@ -179,25 +170,25 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                                                     }
                                                 }
                                                 TaskExecutors.runInUIThread {
-                                                    Toast.makeText(activity, R.string.mod_update_completed, Toast.LENGTH_LONG).show()
+                                                    Toast.makeText(activity, "Updates completed", Toast.LENGTH_LONG).show()
                                                 }
                                             }
                                         }
-                                        .setNegativeButton(R.string.generic_cancel, null)
+                                        .setNegativeButton("Cancel", null)
                                         .show()
                                 }
                             }
                         } catch (e: Throwable) {
                             Logging.e("ModUpdate", "Update check failed", e)
                             TaskExecutors.runInUIThread {
-                                progressLayout?.clear()
                                 binding.checkUpdates.isEnabled = true
+                                toast.cancel()
                                 Tools.showError(activity, "Mod update check failed: ${e.message ?: "Unknown error"}", e)
                             }
                         }
                     }
                 }
-                
+
                 else -> {}
             }
         }
