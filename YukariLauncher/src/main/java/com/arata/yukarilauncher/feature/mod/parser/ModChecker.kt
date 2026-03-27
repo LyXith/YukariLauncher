@@ -204,16 +204,16 @@ class ModChecker {
             while (entries.hasMoreElements()) {
                 val entry = entries.nextElement()
                 val name = entry.name
-                if (name.contains("zstd-jni-") && name.endsWith(".so") &&
+                if (name.contains("libzstd-jni-") && name.endsWith(".so") &&
                     (name.contains("linux") || name.contains("aarch64") || name.contains("arm64"))
                 ) {
-                    val versionStart = "zstd-jni-"
+                    val versionStart = "libzstd-jni-"
                     val versionEnd = ".so"
                     val startIndex = name.indexOf(versionStart) + versionStart.length
                     val endIndex = name.indexOf(versionEnd, startIndex)
                     if (startIndex >= 0 && endIndex > startIndex) {
                         val version = name.substring(startIndex, endIndex)
-                        val libFileName = "zstd-jni-$version.so"
+                        val libFileName = "libzstd-jni-$version.so"
                         val targetFile = File(PathManager.DIR_MOD_LIBRARY, libFileName)
                         if (targetFile.exists()) {
                             return true
