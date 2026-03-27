@@ -4,6 +4,7 @@ import com.arata.yukarilauncher.feature.download.platform.update.ModUpdate
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
+import org.json.JSONObject
 
 object ModrinthUpdateHelper {
     private val client = OkHttpClient()
@@ -18,7 +19,7 @@ object ModrinthUpdateHelper {
             val versions = JSONArray(response.body?.string() ?: return null)
             if (versions.length() == 0) return null
 
-            // Find the latest version that supports the given Minecraft version and loader (if provided)
+            // Find the latest version compatible with the given Minecraft version and loader
             val compatibleVersions = mutableListOf<JSONObject>()
             for (i in 0 until versions.length()) {
                 val version = versions.getJSONObject(i)
@@ -50,7 +51,7 @@ object ModrinthUpdateHelper {
             }
             if (compatibleVersions.isEmpty()) return null
 
-            // Assume list is sorted newest first (API returns newest first)
+            // Assume list is sorted newest first
             val latest = compatibleVersions[0]
             val latestVersion = latest.getString("version_number")
             val downloadUrl = latest.getJSONArray("files").getJSONObject(0).getString("url")

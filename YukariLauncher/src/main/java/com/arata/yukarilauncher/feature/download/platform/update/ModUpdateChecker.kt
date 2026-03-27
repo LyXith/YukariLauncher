@@ -11,23 +11,24 @@ object ModUpdateChecker {
     private val executor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    fun checkUpdatesAsync(modsDir: File, onComplete: (List<ModUpdate>) -> Unit) {
+    fun checkUpdatesAsync(modsDir: File, minecraftVersion: String, onComplete: (List<ModUpdate>) -> Unit) {
         executor.execute {
             val installedMods = InstalledModsScanner.scan(modsDir)
             val updates = mutableListOf<ModUpdate>()
 
             installedMods.forEach { mod ->
-                // Try Modrinth first
-                val modrinth = ModrinthUpdateHelper.checkUpdate(mod.modId, mod.version)
-                if (modrinth?.needsUpdate == true) {
-                    updates.add(modrinth)
-                } else {
-                    val curseforge = CurseForgeUpdateHelper.checkUpdate(mod.modId, mod.version)
-                    if (curseforge?.needsUpdate == true) updates.add(curseforge)
+                when (mod.loader.lowercase()) {
+                    "fabric" -> {
+                        val modrinth = ModrinthUpdateHelper.checkUpdate(mod.modId, mod.version, minecraftVersion, mod.loader.lowercase())
+                        if (modrinth?.needsUpdate == true) updates.add(modrinth)
+                    }
+                    "forge", "neoforge" -> {
+                        val curseforge = CurseForgeUpdateHelper.checkUpdate(mod.modId, mod.version, minecraftVersion)
+                        if (curseforge?.needsUpdate == true) updates.add(curseforge)
+                    }
                 }
             }
 
-            // Return results to main thread
             mainHandler.post { onComplete(updates) }
         }
     }
