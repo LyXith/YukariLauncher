@@ -4,8 +4,8 @@ this is just my ordinary used.
 * Add libzstd for AxiomMod just arm64
 * Add libPhysXjniBindings for PhysicsMod just arm64
 * Customize with purple accent
+* working Axiom mod
 * Working on mods updater(but not going well because I'm nothing on build app)
-* Everything I add is A.I work, so don't complain if you find any bugs :)
 # 
 <div align="center">
     <img width="256" src="YukariLauncher/src/main/res/drawable/app_name_title.png"></img>
