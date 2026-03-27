@@ -1,7 +1,6 @@
 package com.arata.yukarilauncher.feature.mod.parser
 
 import android.content.Context
-import android.os.Looper
 import android.os.Parcel
 import android.os.Parcelable
 import com.mio.util.AndroidUtil
@@ -198,6 +197,10 @@ class ModChecker {
         }
     }
 
+    /**
+     * Handle Axiom mod: extract required native library version and download it if missing.
+     * @return null on success, error message string on failure.
+     */
     private fun handleAxiom(context: Context, modFile: File): String? {
         ZipFile(modFile).use { zipFile ->
             val entries = zipFile.entries()
@@ -227,20 +230,19 @@ class ModChecker {
                         Logging.i("Axiom", "Attempting to download $libFileName from $url")
                         Logging.i("Axiom", "Target library path: ${PathManager.DIR_MOD_LIBRARY}")
 
-                        // Use a single‑thread executor to offload network work
-                        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
-                        val future = executor.submit {
-                            try {
-                                // Show progress on UI thread
-                                TaskExecutors.runInUIThread {
-                                    com.kdt.mcgui.ProgressLayout.setProgress(
-                                        com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE,
-                                        0,
-                                        R.string.mod_check_axiom_downloading,
-                                        libFileName
-                                    )
-                                }
+                        // Show progress on UI thread
+                        TaskExecutors.runInUIThread {
+                            com.kdt.mcgui.ProgressLayout.setProgress(
+                                com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE,
+                                0,
+                                R.string.mod_check_axiom_downloading,
+                                libFileName
+                            )
+                        }
 
+                        var error: String? = null
+                        val thread = Thread {
+                            try {
                                 val connection = URL(url).openConnection()
                                 connection.setRequestProperty("User-Agent", "YukariLauncher")
                                 connection.connect()
@@ -250,34 +252,22 @@ class ModChecker {
                                         input.copyTo(output)
                                     }
                                 }
-
-                                // Success – clear progress on UI thread
-                                TaskExecutors.runInUIThread {
-                                    com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
-                                }
                                 Logging.i("Axiom", "Successfully downloaded $libFileName")
-                                null // success
                             } catch (e: Exception) {
                                 Logging.e("Axiom", "Failed to download $libFileName", e)
+                                val errorDetail = "${e.javaClass.simpleName}: ${e.message ?: "No message"}"
+                                error = context.getString(R.string.mod_check_axiom_failed, modFile.name) + "\n" +
+                                        context.getString(R.string.mod_check_axiom_debug, errorDetail)
+                            } finally {
+                                // Clear progress on UI thread
                                 TaskExecutors.runInUIThread {
                                     com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
                                 }
-                                val errorDetail = "${e.javaClass.simpleName}: ${e.message ?: "No message"}"
-                                context.getString(R.string.mod_check_axiom_failed, modFile.name) + "\n" +
-                                        context.getString(R.string.mod_check_axiom_debug, errorDetail)
                             }
                         }
-
-                        // Shut down the executor and wait for the result
-                        executor.shutdown()
-                        var errorMessage: String? = null
-                        try {
-                            errorMessage = future.get() // returns String? (null on success)
-                        } catch (e: Exception) {
-                            errorMessage = context.getString(R.string.mod_check_axiom_failed, modFile.name) + "\n" +
-                                    context.getString(R.string.mod_check_axiom_debug, "Unexpected error: ${e.message}")
-                        }
-                        return errorMessage
+                        thread.start()
+                        thread.join()
+                        return error
                     }
                     break
                 }
