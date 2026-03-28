@@ -1,11 +1,10 @@
 # Yukari Launcher is Fork of Zalith Launcher
 this is just my ordinary used.
 * Changing default control with my own
-* Add libzstd for AxiomMod just arm64
-* Add libPhysXjniBindings for PhysicsMod just arm64
-* Customize with purple accent
-* working Axiom mod
-* Working on mods updater(but not going well because I'm nothing on build app)
+* Changing color accent with purple
+* Add Mods Updater (still buggy)
+* Add terminal (useless)
+* Add fixes Axiom mod
 # 
 <div align="center">
     <img width="256" src="YukariLauncher/src/main/res/drawable/app_name_title.png"></img>
