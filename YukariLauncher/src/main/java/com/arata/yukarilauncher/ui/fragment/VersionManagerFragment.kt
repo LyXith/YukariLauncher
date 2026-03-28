@@ -139,9 +139,17 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                             val minecraftVersion = version.getVersionName()
                             Logging.i("ModUpdate", "Minecraft version: $minecraftVersion")
 
-                            val installedMods = runCatching { InstalledModsScanner.scan(modsDir) }
-                                .getOrElse { emptyList() }
-                            Logging.i("ModUpdate", "Found ${installedMods.size} mods")
+                            // Scan mods with error logging
+                            val installedMods = runCatching {
+                                InstalledModsScanner.scan(modsDir)
+                            }.onSuccess { mods ->
+                                Logging.i("ModUpdate", "Found ${mods.size} mods")
+                                mods.forEach { mod ->
+                                    Logging.i("ModUpdate", "  - ${mod.modName} (${mod.modId}) v${mod.version} [${mod.loader}]")
+                                }
+                            }.onFailure { e ->
+                                Logging.e("ModUpdate", "Failed to scan mods", e)
+                            }.getOrElse { emptyList() }
 
                             val updates = mutableListOf<ModUpdate>()
 
@@ -150,11 +158,9 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                                 runCatching {
                                     val update = when (mod.loader.lowercase()) {
                                         "fabric" -> {
-                                            Logging.i("ModUpdate", "Using Modrinth for ${mod.modName}")
                                             ModrinthUpdateHelper.checkUpdate(mod.modId, mod.version, minecraftVersion, mod.loader.lowercase())
                                         }
                                         "forge", "neoforge" -> {
-                                            Logging.i("ModUpdate", "Using CurseForge for ${mod.modName}")
                                             CurseForgeUpdateHelper.checkUpdate(mod.modId, mod.version, minecraftVersion)
                                         }
                                         else -> null
