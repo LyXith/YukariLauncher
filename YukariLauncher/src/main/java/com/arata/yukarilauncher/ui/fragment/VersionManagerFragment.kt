@@ -134,22 +134,37 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                             val modsDir = File(gameDir, "mods").apply {
                                 if (!exists()) mkdirs()
                             }
+                            Logging.i("ModUpdate", "Scanning mods in: $modsDir")
 
                             val minecraftVersion = version.getVersionName()
+                            Logging.i("ModUpdate", "Minecraft version: $minecraftVersion")
 
                             val installedMods = runCatching { InstalledModsScanner.scan(modsDir) }
                                 .getOrElse { emptyList() }
+                            Logging.i("ModUpdate", "Found ${installedMods.size} mods")
 
                             val updates = mutableListOf<ModUpdate>()
 
                             installedMods.forEach { mod ->
+                                Logging.i("ModUpdate", "Checking ${mod.modName} (${mod.modId}) loader: ${mod.loader} version: ${mod.version}")
                                 runCatching {
                                     val update = when (mod.loader.lowercase()) {
-                                        "fabric" -> ModrinthUpdateHelper.checkUpdate(mod.modId, mod.version, minecraftVersion, mod.loader.lowercase())
-                                        "forge", "neoforge" -> CurseForgeUpdateHelper.checkUpdate(mod.modId, mod.version, minecraftVersion)
+                                        "fabric" -> {
+                                            Logging.i("ModUpdate", "Using Modrinth for ${mod.modName}")
+                                            ModrinthUpdateHelper.checkUpdate(mod.modId, mod.version, minecraftVersion, mod.loader.lowercase())
+                                        }
+                                        "forge", "neoforge" -> {
+                                            Logging.i("ModUpdate", "Using CurseForge for ${mod.modName}")
+                                            CurseForgeUpdateHelper.checkUpdate(mod.modId, mod.version, minecraftVersion)
+                                        }
                                         else -> null
                                     }
-                                    if (update?.needsUpdate == true) updates.add(update)
+                                    if (update?.needsUpdate == true) {
+                                        Logging.i("ModUpdate", "Update available for ${mod.modName}: ${update.latestVersion}")
+                                        updates.add(update)
+                                    } else {
+                                        Logging.i("ModUpdate", "No update for ${mod.modName} (current: ${mod.version})")
+                                    }
                                 }.onFailure { e ->
                                     Logging.e("ModUpdate", "Failed to check ${mod.modName}: ${e.message}", e)
                                 }
@@ -170,8 +185,10 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                                             TaskExecutors.getDefault().execute {
                                                 updates.forEach { update: ModUpdate ->
                                                     runCatching {
-                                                        val fileName = "${update.modName}-${update.latestVersion}.jar".replace("/", "_")
+                                                        Logging.i("ModUpdate", "Downloading ${update.modName} from ${update.downloadUrl}")
+                                                        val fileName = "${update.modName}-${update.latestVersion}.jar".replace("/", "_").replace(" ", "_")
                                                         ModDownloader.download(update.downloadUrl, fileName, gameDir)
+                                                        Logging.i("ModUpdate", "Downloaded ${update.modName}")
                                                     }.onFailure { e ->
                                                         Logging.e("ModUpdate", "Failed to download ${update.modName}: ${e.message}", e)
                                                     }

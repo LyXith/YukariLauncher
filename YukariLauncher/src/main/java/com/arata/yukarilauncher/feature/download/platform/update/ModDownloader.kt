@@ -12,13 +12,11 @@ object ModDownloader {
         val request = Request.Builder().url(url).build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                println("Download failed: HTTP ${response.code}")
-                return
+                throw Exception("HTTP ${response.code} - ${response.message}")
             }
             val bytes = response.body?.bytes()
             if (bytes == null || bytes.isEmpty()) {
-                println("Downloaded file is empty or null")
-                return
+                throw Exception("Downloaded file is empty or null")
             }
 
             val modsDir = File(versionDir, "mods")
