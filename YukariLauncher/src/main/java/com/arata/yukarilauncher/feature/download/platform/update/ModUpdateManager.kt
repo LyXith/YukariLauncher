@@ -68,7 +68,7 @@ object ModUpdateManager {
 
                         if (update?.needsUpdate == true) {
                             Logging.i("ModUpdate", "Update available for ${mod.modName}: ${update.latestVersion}")
-                            updates.add(update.copy(originalFile = mod.file)) // Store original file for later deletion
+                            updates.add(update.copy(originalFile = mod.file))
                         } else {
                             Logging.i("ModUpdate", "No update for ${mod.modName}")
                         }
@@ -121,8 +121,8 @@ object ModUpdateManager {
                         TaskExecutors.runInUIThread {
                             onProgress(index + 1, total, fileName, 100)
                         }
-                        // If the new file already exists, we can optionally delete the old one
-                        update.originalFile?.takeIf { it.exists() && it != targetFile }?.delete()
+                        // Delete old file if it exists and is different
+                        update.originalFile?.takeIf { file: File -> file.exists() && file != targetFile }?.delete()
                         return@forEachIndexed
                     }
 
@@ -139,8 +139,8 @@ object ModUpdateManager {
                             }
                         }
                     )
-                    // Delete the old mod file after successful download
-                    update.originalFile?.takeIf { it.exists() && it != targetFile }?.delete()
+                    // Delete old file after successful download
+                    update.originalFile?.takeIf { file: File -> file.exists() && file != targetFile }?.delete()
                     successCount++
                     Logging.i("ModUpdate", "Downloaded $fileName")
                 }
