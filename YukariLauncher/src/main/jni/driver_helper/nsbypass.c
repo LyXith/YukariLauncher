@@ -38,6 +38,15 @@ static struct android_namespace_t* driver_namespace = NULL;
 
 bool patch_elf_soname(int patchfd, int realfd, uint16_t patchid);
 
+/* Helper to get system page size */
+static inline size_t get_page_size(void) {
+    static size_t pagesize = 0;
+    if (pagesize == 0) {
+        pagesize = sysconf(_SC_PAGESIZE);
+    }
+    return pagesize;
+}
+
 static struct android_namespace_t* create_namespace_local(
     const char* name, const char* ld_library_path, const char* default_library_path, uint64_t type,
     const char* permitted_when_isolated_path, struct android_namespace_t* parent) {
@@ -47,8 +56,9 @@ static struct android_namespace_t* create_namespace_local(
 }
 
 static void* find_branch_label(void* func_start) {
-    void* func_page_start = (void*)(((uintptr_t)func_start) & ~(PAGE_SIZE - 1));
-    mprotect(func_page_start, PAGE_SIZE, PROT_READ | PROT_EXEC);
+    size_t page_size = get_page_size();
+    void* func_page_start = (void*)(((uintptr_t)func_start) & ~(page_size - 1));
+    mprotect(func_page_start, page_size, PROT_READ | PROT_EXEC);
     uint32_t* bl_addr = func_start;
 
     while ((*bl_addr & OP_MS) != BL_OP)
@@ -61,7 +71,8 @@ static void* find_branch_label(void* func_start) {
 bool linker_ns_load(const char* lib_search_path) {
 #ifdef ADRENO_POSSIBLE
     loader_dlopen_t loader_dlopen = find_branch_label(&dlopen);
-    mprotect(loader_dlopen, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC);
+    size_t page_size = get_page_size();
+    mprotect(loader_dlopen, page_size, PROT_READ | PROT_WRITE | PROT_EXEC);
 
     void* ld_android_handle = loader_dlopen("ld-android.so", RTLD_LAZY, &dlopen);
     if (!ld_android_handle)
