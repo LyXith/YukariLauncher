@@ -30,6 +30,7 @@ object CurseForgeUpdateHelper {
             val latest = data.getJSONObject(0)
             val latestVersion = latest.getString("displayName")
             val downloadUrl = latest.getString("downloadUrl")
+            val fileName = latest.getString("fileName")  // e.g., "Sodium-0.8.7+mc1.21.11.jar"
 
             return ModUpdate(
                 modId = modId,
@@ -37,6 +38,7 @@ object CurseForgeUpdateHelper {
                 currentVersion = currentVersion,
                 latestVersion = latestVersion,
                 downloadUrl = downloadUrl,
+                fileName = fileName,
                 needsUpdate = currentVersion != latestVersion
             )
         }

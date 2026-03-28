@@ -53,7 +53,10 @@ object ModrinthUpdateHelper {
             // The API returns versions sorted by date descending (newest first)
             val latest = compatibleVersions[0]
             val latestVersion = latest.getString("version_number")
-            val downloadUrl = latest.getJSONArray("files").getJSONObject(0).getString("url")
+            val files = latest.getJSONArray("files")
+            val firstFile = files.getJSONObject(0)
+            val downloadUrl = firstFile.getString("url")
+            val fileName = firstFile.getString("filename")  // e.g., "sodium-fabric-0.8.7+mc1.21.11.jar"
 
             return ModUpdate(
                 modId = projectIdOrSlug,
@@ -61,6 +64,7 @@ object ModrinthUpdateHelper {
                 currentVersion = currentVersion,
                 latestVersion = latestVersion,
                 downloadUrl = downloadUrl,
+                fileName = fileName,
                 needsUpdate = currentVersion != latestVersion
             )
         }

@@ -42,7 +42,6 @@ object ModUpdateManager {
                                 )
                             }
                             "forge", "neoforge" -> {
-                                // Try Modrinth first (supports slug IDs), fallback to CurseForge only if the ID is numeric
                                 Logging.i("ModUpdate", "Trying Modrinth for ${mod.modName}")
                                 var update = ModrinthUpdateHelper.checkUpdate(
                                     mod.modId,
@@ -111,15 +110,12 @@ object ModUpdateManager {
                 val total = updates.size
 
                 updates.forEachIndexed { index, update ->
-                    val fileName = "${update.modName}-${update.latestVersion}.jar"
-                        .replace("/", "_")
-                        .replace(" ", "_")
-                    val targetFile = File(modsDir, fileName)
+                    val targetFile = File(modsDir, update.fileName)
 
                     if (targetFile.exists()) {
                         successCount++
                         TaskExecutors.runInUIThread {
-                            onProgress(index + 1, total, fileName, 100)
+                            onProgress(index + 1, total, update.fileName, 100)
                         }
                         // Delete old file if it exists and is different
                         update.originalFile?.takeIf { file: File -> file.exists() && file != targetFile }?.delete()
@@ -134,7 +130,7 @@ object ModUpdateManager {
                             if (percent > lastPercent) {
                                 lastPercent = percent
                                 TaskExecutors.runInUIThread {
-                                    onProgress(index + 1, total, fileName, percent)
+                                    onProgress(index + 1, total, update.fileName, percent)
                                 }
                             }
                         }
@@ -142,7 +138,7 @@ object ModUpdateManager {
                     // Delete old file after successful download
                     update.originalFile?.takeIf { file: File -> file.exists() && file != targetFile }?.delete()
                     successCount++
-                    Logging.i("ModUpdate", "Downloaded $fileName")
+                    Logging.i("ModUpdate", "Downloaded ${update.fileName}")
                 }
 
                 TaskExecutors.runInUIThread {
