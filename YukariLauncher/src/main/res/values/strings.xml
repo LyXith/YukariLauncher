@@ -137,6 +137,9 @@
     <string name="mod_check_imblocker">IMBlocker/In-GameIME (%s) is not compatible with Android and will cause the game to crash during startup.</string>
     <string name="mod_check_replay_mod">ReplayMod (%s) requires FFmpeg to render videos. Please install the FFmpeg plugin separately\n%s\n%s</string>
     <string name="mod_check_borderlesswindow">Borderless Window (%s) is not compatible with Android and will cause the game to crash during startup.</string>
+    <string name="mod_check_axiom_downloading">Downloading Axiom native library: %s</string>
+    <string name="mod_check_axiom_failed">Failed to download required native library for Axiom (%s).</string>
+    <string name="mod_check_axiom_debug">Debug: %s</string>
     <!-- Controls -->
     <string name="control_primary">Left Click</string>
     <string name="control_secondary">Right Click</string>
@@ -248,6 +251,8 @@
     <string name="check_mod_updates">Check for Mod Updates</string>
     <string name="no_updates_found">All mods are up to date.</string>
     <string name="update_all">Update All</string>
+    <string name="mod_update_checking">Checking mod updates...</string>
+    <string name="mod_update_downloading">Downloading %1$s (%2$d%%)</string>
     <string name="version_manager_delete_tip">Deleting a version will also delete all files in the \"./versions/%s\" directory, including important resources such as game saves, resource packs, mods, etc., even if version isolation is not enabled. Therefore, please make sure to backup before performing this operation!</string>
     <string name="version_manager_delete_tip_invalid">The current version is missing the version JSON file and is therefore considered an invalid version. You cannot select this version. Click Confirm to delete this erroneous version.</string>
     <string name="version_manager_task_in_progress">Task in progress, version management is temporarily unavailable</string>
@@ -442,6 +447,7 @@
     <string name="setting_mouse_start_title">Show Virtual Mouse by Default on Game Start</string>
     <string name="setting_mouse_start_desc">When this option is enabled, the virtual mouse will appear on startup</string>
     <string name="setting_disable_gestures_title">Disable Gestures</string>
+    <string name="setting_force_gui_input_title">Force GUI Touch Input</string>
     <string name="setting_disable_gestures_desc">Disable gestures such as long press to break blocks, tap to place blocks</string>
     <string name="setting_disable_swap_hand_title">Disable Double Tap to Swap Items</string>
     <string name="setting_disable_swap_hand_desc">Disable double tapping an item in the hotbar to swap it with the off-hand item</string>

@@ -4,18 +4,18 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import com.arata.anim.AnimPlayer
 import com.arata.anim.animations.Animations
 import com.arata.yukarilauncher.R
 import com.arata.yukarilauncher.databinding.FragmentVersionManagerBinding
+import com.arata.yukarilauncher.feature.download.platform.update.ModUpdate
+import com.arata.yukarilauncher.feature.download.platform.update.ModUpdateManager
+import com.arata.yukarilauncher.feature.log.Logging
 import com.arata.yukarilauncher.feature.version.NoVersionException
 import com.arata.yukarilauncher.feature.version.Version
 import com.arata.yukarilauncher.feature.version.VersionsManager
-import com.arata.yukarilauncher.feature.download.platform.curseforge.update.CurseForgeUpdateHelper
-import com.arata.yukarilauncher.feature.download.platform.modrinth.update.ModrinthUpdateHelper
-import com.arata.yukarilauncher.feature.download.platform.update.InstalledModsScanner
-import com.arata.yukarilauncher.feature.download.platform.update.ModDownloader
-import com.arata.yukarilauncher.feature.download.platform.update.ModUpdate
 import com.arata.yukarilauncher.task.Task
 import com.arata.yukarilauncher.task.TaskExecutors
 import com.arata.yukarilauncher.ui.dialog.TipDialog
@@ -55,7 +55,7 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
             versionRename.setOnClickListener(fragment)
             versionCopy.setOnClickListener(fragment)
             versionDelete.setOnClickListener(fragment)
-            checkUpdates.setOnClickListener(fragment) // ✅ correct button ID
+            checkUpdates.setOnClickListener(fragment)
         }
     }
 
@@ -71,6 +71,24 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
             putBoolean(FilesFragment.BUNDLE_QUICK_ACCESS_PATHS, false)
         }
         ZHTools.swapFragmentWithAnim(this, FilesFragment::class.java, FilesFragment.TAG, bundle)
+    }
+
+    /**
+     * Extracts the pure Minecraft version (without loader suffix) from a Version object.
+     * Falls back to stripping common suffixes like " Fabric", " Forge", " NeoForge".
+     */
+    private fun getGameVersion(version: Version): String {
+        val versionInfo = version.getVersionInfo()
+        if (versionInfo != null && versionInfo.minecraftVersion.isNotBlank()) {
+            return versionInfo.minecraftVersion
+        }
+        // Fallback: strip known suffixes
+        val rawName = version.getVersionName()
+        return rawName
+            .replace(" Fabric", "")
+            .replace(" Forge", "")
+            .replace(" NeoForge", "")
+            .trim()
     }
 
     override fun onClick(v: View) {
@@ -121,43 +139,69 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                         .showDialog()
                 }
 
-                // ✅ Corrected update checker handler
+                // ============================================================
+                // MOD UPDATE CHECKER – using the improved ModUpdateManager
+                // ============================================================
                 checkUpdates -> {
-                    try {
-                        val modsDir = File(gameDir, "mods").mustExists()
-                        val installedMods = InstalledModsScanner.scan(modsDir)
-                        val updates = mutableListOf<ModUpdate>()
+                    binding.checkUpdates.isEnabled = false
+                    val toast = Toast.makeText(activity, "Checking for updates...", Toast.LENGTH_SHORT)
+                    toast.show()
 
-                        installedMods.forEach { mod ->
-                            try {
-                                val update = when (mod.loader.lowercase()) {
-                                    "fabric" -> ModrinthUpdateHelper.checkUpdate(mod.modId, mod.version)
-                                    "forge", "neoforge" -> CurseForgeUpdateHelper.checkUpdate(mod.modId, mod.version)
-                                    else -> null
-                                }
-                                if (update?.needsUpdate == true) updates.add(update)
-                            } catch (e: Exception) {
-                                println("⚠️ Failed to check ${mod.modName}: ${e.message}")
-                            }
-                        }
+                    val modsDir = File(gameDir, "mods").apply { if (!exists()) mkdirs() }
+                    val minecraftVersion = getGameVersion(version)
+                    Logging.i("ModUpdate", "Using game version: $minecraftVersion")
 
-                        if (updates.isEmpty()) {
-                            Tools.showError(activity, "✅ All mods are up to date!", Exception(""))
-                        } else {
-                            updates.forEach {
-                                try {
-                                    ModDownloader.download(it.downloadUrl, "${it.modName}-${it.latestVersion}.jar", gameDir)
-                                    println("⬇️ Updated ${it.modName} to ${it.latestVersion}")
-                                } catch (e: Exception) {
-                                    println("⚠️ Failed to update ${it.modName}: ${e.message}")
+                    ModUpdateManager.checkUpdates(
+                        context = activity,
+                        modsDir = modsDir,
+                        minecraftVersion = minecraftVersion,
+                        onProgress = { current, total, modName ->
+                            toast.setText("Checking $modName ($current/$total)")
+                        },
+                        onComplete = { updates ->
+                            toast.cancel()
+                            binding.checkUpdates.isEnabled = true
+
+                            if (updates.isEmpty()) {
+                                Toast.makeText(activity, "All mods are up to date!", Toast.LENGTH_LONG).show()
+                            } else {
+                                val message = updates.joinToString(separator = "\n") { update ->
+                                    "${update.modName} → ${update.latestVersion}"
                                 }
+                                AlertDialog.Builder(activity)
+                                    .setTitle("Mod Updates Available")
+                                    .setMessage(message)
+                                    .setPositiveButton("Update All") { _, _ ->
+                                        val progressToast = Toast.makeText(activity, "Downloading...", Toast.LENGTH_LONG)
+                                        progressToast.show()
+
+                                        ModUpdateManager.applyUpdates(
+                                            context = activity,
+                                            updates = updates,
+                                            gameDir = gameDir,
+                                            onProgress = { current, total, fileName, percent ->
+                                                progressToast.setText("Downloading $fileName ($percent%)")
+                                            },
+                                            onComplete = {
+                                                progressToast.cancel()
+                                                Toast.makeText(activity, "Updates completed", Toast.LENGTH_LONG).show()
+                                            },
+                                            onError = { e ->
+                                                progressToast.cancel()
+                                                Tools.showError(activity, "Update failed: ${e.message}", e)
+                                            }
+                                        )
+                                    }
+                                    .setNegativeButton("Cancel", null)
+                                    .show()
                             }
-                            Tools.showError(activity, "⬇️ Updated ${updates.size} mods successfully!", Exception(""))
+                        },
+                        onError = { e ->
+                            toast.cancel()
+                            binding.checkUpdates.isEnabled = true
+                            Tools.showError(activity, "Update check failed: ${e.message}", e)
                         }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        Tools.showError(activity, "❌ Mod update check failed:\n${e.message ?: "Unknown error"}", e)
-                    }
+                    )
                 }
 
                 else -> {}

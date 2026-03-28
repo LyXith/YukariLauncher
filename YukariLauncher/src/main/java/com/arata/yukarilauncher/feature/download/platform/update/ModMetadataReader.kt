@@ -1,5 +1,6 @@
 package com.arata.yukarilauncher.feature.download.platform.update
 
+import com.arata.yukarilauncher.feature.log.Logging
 import org.json.JSONObject
 import java.io.File
 import java.util.jar.JarFile
@@ -10,10 +11,10 @@ object ModMetadataReader {
         val modId: String,
         val modName: String,
         val version: String,
-        val loader: String
+        val loader: String,
+        val file: File   // <-- added
     )
 
-    /** Parse Fabric mod metadata (fabric.mod.json) */
     private fun parseFabric(jar: File): ModInfo? {
         return try {
             JarFile(jar).use { jarFile ->
@@ -23,17 +24,16 @@ object ModMetadataReader {
                     modId = json.getString("id"),
                     modName = json.optString("name", json.getString("id")),
                     version = json.optString("version", "unknown"),
-                    loader = "fabric"
+                    loader = "fabric",
+                    file = jar
                 )
             }
         } catch (e: Exception) {
-            // Prevent crash if mod JAR is invalid or has duplicate entries
-            println("⚠️ Failed to parse Fabric mod ${jar.name}: ${e.message}")
+            Logging.e("ModMetadata", "Failed to parse Fabric mod ${jar.name}", e)
             null
         }
     }
 
-    /** Parse Forge or NeoForge mod metadata (META-INF/mods.toml) */
     private fun parseForge(jar: File): ModInfo? {
         return try {
             JarFile(jar).use { jarFile ->
@@ -48,18 +48,17 @@ object ModMetadataReader {
                     modId = modId,
                     modName = displayName,
                     version = version,
-                    loader = "forge"
+                    loader = "forge",
+                    file = jar
                 )
             }
         } catch (e: Exception) {
-            println("⚠️ Failed to parse Forge mod ${jar.name}: ${e.message}")
+            Logging.e("ModMetadata", "Failed to parse Forge mod ${jar.name}", e)
             null
         }
     }
 
-    /** Parse both Fabric, Forge, and NeoForge mods safely */
     fun parseMod(jar: File): ModInfo? {
-        // Try Fabric first, then Forge/NeoForge
         return parseFabric(jar) ?: parseForge(jar)
     }
 }

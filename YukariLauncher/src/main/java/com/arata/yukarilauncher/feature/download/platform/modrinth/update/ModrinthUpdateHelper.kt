@@ -4,11 +4,12 @@ import com.arata.yukarilauncher.feature.download.platform.update.ModUpdate
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
+import org.json.JSONObject
 
 object ModrinthUpdateHelper {
     private val client = OkHttpClient()
 
-    fun checkUpdate(projectIdOrSlug: String, currentVersion: String): ModUpdate? {
+    fun checkUpdate(projectIdOrSlug: String, currentVersion: String, minecraftVersion: String, loader: String? = null): ModUpdate? {
         val request = Request.Builder()
             .url("https://api.modrinth.com/v2/project/$projectIdOrSlug/version")
             .build()
@@ -18,9 +19,44 @@ object ModrinthUpdateHelper {
             val versions = JSONArray(response.body?.string() ?: return null)
             if (versions.length() == 0) return null
 
-            val latest = versions.getJSONObject(0)
+            val compatibleVersions = mutableListOf<JSONObject>()
+            for (i in 0 until versions.length()) {
+                val version = versions.getJSONObject(i)
+                // Check game version
+                val gameVersions = version.getJSONArray("game_versions")
+                var gameVersionOk = false
+                for (j in 0 until gameVersions.length()) {
+                    if (gameVersions.getString(j) == minecraftVersion) {
+                        gameVersionOk = true
+                        break
+                    }
+                }
+                if (!gameVersionOk) continue
+
+                // Optionally check loader
+                if (loader != null) {
+                    val loaders = version.getJSONArray("loaders")
+                    var loaderOk = false
+                    for (j in 0 until loaders.length()) {
+                        if (loaders.getString(j).equals(loader, ignoreCase = true)) {
+                            loaderOk = true
+                            break
+                        }
+                    }
+                    if (!loaderOk) continue
+                }
+
+                compatibleVersions.add(version)
+            }
+            if (compatibleVersions.isEmpty()) return null
+
+            // The API returns versions sorted by date descending (newest first)
+            val latest = compatibleVersions[0]
             val latestVersion = latest.getString("version_number")
-            val downloadUrl = latest.getJSONArray("files").getJSONObject(0).getString("url")
+            val files = latest.getJSONArray("files")
+            val firstFile = files.getJSONObject(0)
+            val downloadUrl = firstFile.getString("url")
+            val fileName = firstFile.getString("filename")  // e.g., "sodium-fabric-0.8.7+mc1.21.11.jar"
 
             return ModUpdate(
                 modId = projectIdOrSlug,
@@ -28,6 +64,7 @@ object ModrinthUpdateHelper {
                 currentVersion = currentVersion,
                 latestVersion = latestVersion,
                 downloadUrl = downloadUrl,
+                fileName = fileName,
                 needsUpdate = currentVersion != latestVersion
             )
         }
