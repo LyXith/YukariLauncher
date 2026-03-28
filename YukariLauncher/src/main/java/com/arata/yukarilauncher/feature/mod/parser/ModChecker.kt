@@ -1,6 +1,7 @@
 package com.arata.yukarilauncher.feature.mod.parser
 
 import android.content.Context
+import android.os.Build
 import android.os.Parcel
 import android.os.Parcelable
 import com.mio.util.AndroidUtil
@@ -65,8 +66,6 @@ class ModChecker {
             }
         }
     }
-
-    private val AXIOM_ZSTD_BASE_URL = "https://github.com/Shiraishi-Arata/Yukari-Fixes/releases/download/axiom-zstd/"
 
     /**
      * 检查所有模组，并对一些已知的模组进行判断
@@ -179,7 +178,6 @@ class ModChecker {
                     }
                 }
 
-                // Axiom mod detection (by filename pattern)
                 if (mod.file.name.matches(Regex("Axiom-.*\\.jar", RegexOption.IGNORE_CASE))) {
                     val errorMessage = handleAxiom(context, mod.file)
                     if (errorMessage != null) {
@@ -197,26 +195,37 @@ class ModChecker {
         }
     }
 
-    /**
-     * Handle Axiom mod: extract required native library version and download it if missing.
-     * @return null on success, error message string on failure.
-     */
     private fun handleAxiom(context: Context, modFile: File): String? {
+        val deviceAbi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
+        val abiTag = when {
+            deviceAbi.contains("arm64") -> "arm64"
+            deviceAbi.contains("x86_64") -> "x86_64"
+            deviceAbi.contains("x86") -> "x86"
+            deviceAbi.contains("armeabi-v7a") -> "arm"
+            else -> "arm64"
+        }
+        Logging.i("Axiom", "Device ABI: $deviceAbi, using tag: $abiTag")
+
         ZipFile(modFile).use { zipFile ->
             val entries = zipFile.entries()
             while (entries.hasMoreElements()) {
                 val entry = entries.nextElement()
                 val name = entry.name
-                if (name.contains("zstd-jni-") && name.endsWith(".so") &&
-                    (name.contains("aarch64") || name.contains("arm64"))
-                ) {
+                val matchesAbi = when (abiTag) {
+                    "arm64" -> name.contains("aarch64") || name.contains("arm64")
+                    "x86_64" -> name.contains("x86_64") || name.contains("amd64")
+                    "x86" -> name.contains("x86") && !name.contains("x86_64")
+                    "armeabi-v7a" -> name.contains("arm") && !name.contains("arm64") && !name.contains("aarch64")
+                    else -> true
+                }
+                if (name.contains("zstd-jni-") && name.endsWith(".so") && matchesAbi) {
                     val versionStart = "zstd-jni-"
                     val versionEnd = ".so"
                     val startIndex = name.indexOf(versionStart) + versionStart.length
                     val endIndex = name.indexOf(versionEnd, startIndex)
                     if (startIndex >= 0 && endIndex > startIndex) {
                         val version = name.substring(startIndex, endIndex)
-                        Logging.i("Axiom", "Extracted version: $version from $name")
+                        Logging.i("Axiom", "Extracted version: $version from $name (ABI: $abiTag)")
 
                         val libFileName = "libzstd-jni-$version.so"
                         val targetFile = File(PathManager.DIR_MOD_LIBRARY, libFileName)
@@ -226,11 +235,9 @@ class ModChecker {
                             return null
                         }
 
-                        val url = "$AXIOM_ZSTD_BASE_URL$libFileName"
-                        Logging.i("Axiom", "Attempting to download $libFileName from $url")
-                        Logging.i("Axiom", "Target library path: ${PathManager.DIR_MOD_LIBRARY}")
+                        val url = "https://github.com/Shiraishi-Arata/Yukari-Fixes/releases/download/$abiTag/$libFileName"
+                        Logging.i("Axiom", "Attempting to download from: $url")
 
-                        // Show progress on UI thread
                         TaskExecutors.runInUIThread {
                             com.kdt.mcgui.ProgressLayout.setProgress(
                                 com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE,
@@ -254,12 +261,11 @@ class ModChecker {
                                 }
                                 Logging.i("Axiom", "Successfully downloaded $libFileName")
                             } catch (e: Exception) {
-                                Logging.e("Axiom", "Failed to download $libFileName", e)
+                                Logging.e("Axiom", "Download failed", e)
                                 val errorDetail = "${e.javaClass.simpleName}: ${e.message ?: "No message"}"
                                 error = context.getString(R.string.mod_check_axiom_failed, modFile.name) + "\n" +
                                         context.getString(R.string.mod_check_axiom_debug, errorDetail)
                             } finally {
-                                // Clear progress on UI thread
                                 TaskExecutors.runInUIThread {
                                     com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
                                 }
