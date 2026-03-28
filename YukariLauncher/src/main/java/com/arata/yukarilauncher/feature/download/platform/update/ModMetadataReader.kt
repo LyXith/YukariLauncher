@@ -11,7 +11,8 @@ object ModMetadataReader {
         val modId: String,
         val modName: String,
         val version: String,
-        val loader: String
+        val loader: String,
+        val file: File   // <-- added
     )
 
     private fun parseFabric(jar: File): ModInfo? {
@@ -23,7 +24,8 @@ object ModMetadataReader {
                     modId = json.getString("id"),
                     modName = json.optString("name", json.getString("id")),
                     version = json.optString("version", "unknown"),
-                    loader = "fabric"
+                    loader = "fabric",
+                    file = jar
                 )
             }
         } catch (e: Exception) {
@@ -46,7 +48,8 @@ object ModMetadataReader {
                     modId = modId,
                     modName = displayName,
                     version = version,
-                    loader = "forge"
+                    loader = "forge",
+                    file = jar
                 )
             }
         } catch (e: Exception) {
