@@ -1,7 +1,6 @@
 package com.arata.yukarilauncher.feature.download.platform.update
 
 import android.content.Context
-import com.arata.yukarilauncher.R
 import com.arata.yukarilauncher.feature.download.platform.curseforge.update.CurseForgeUpdateHelper
 import com.arata.yukarilauncher.feature.download.platform.modrinth.update.ModrinthUpdateHelper
 import com.arata.yukarilauncher.feature.log.Logging
@@ -10,16 +9,6 @@ import java.io.File
 
 object ModUpdateManager {
 
-    /**
-     * Check for updates for all mods in a given directory.
-     *
-     * @param context           Context for resources
-     * @param modsDir           Directory containing mod JARs
-     * @param minecraftVersion  Current Minecraft version (e.g., "1.21.11")
-     * @param onProgress        Called on UI thread with (current, total, modName)
-     * @param onComplete        Called on UI thread with list of updates (non‑empty if any)
-     * @param onError           Called on UI thread with any exception
-     */
     fun checkUpdates(
         context: Context,
         modsDir: File,
@@ -30,32 +19,58 @@ object ModUpdateManager {
     ) {
         TaskExecutors.getDefault().execute {
             try {
+                Logging.i("ModUpdate", "Checking updates for Minecraft version: $minecraftVersion")
                 val installedMods = InstalledModsScanner.scan(modsDir)
+                Logging.i("ModUpdate", "Found ${installedMods.size} mods")
                 val updates = mutableListOf<ModUpdate>()
 
                 installedMods.forEachIndexed { index, mod ->
-                    // Report progress
                     TaskExecutors.runInUIThread {
                         onProgress(index + 1, installedMods.size, mod.modName)
                     }
 
                     try {
+                        Logging.i("ModUpdate", "Checking ${mod.modName} (${mod.modId}) loader: ${mod.loader} version: ${mod.version}")
                         val update = when (mod.loader.lowercase()) {
-                            "fabric" -> ModrinthUpdateHelper.checkUpdate(
-                                mod.modId,
-                                mod.version,
-                                minecraftVersion,
-                                mod.loader.lowercase()
-                            )
-                            "forge", "neoforge" -> CurseForgeUpdateHelper.checkUpdate(
-                                mod.modId,
-                                mod.version,
-                                minecraftVersion
-                            )
-                            else -> null
+                            "fabric" -> {
+                                Logging.i("ModUpdate", "Using Modrinth for ${mod.modName}")
+                                ModrinthUpdateHelper.checkUpdate(
+                                    mod.modId,
+                                    mod.version,
+                                    minecraftVersion,
+                                    mod.loader.lowercase()
+                                )
+                            }
+                            "forge", "neoforge" -> {
+                                // Try Modrinth first (supports slug IDs), fallback to CurseForge only if the ID is numeric
+                                Logging.i("ModUpdate", "Trying Modrinth for ${mod.modName}")
+                                var update = ModrinthUpdateHelper.checkUpdate(
+                                    mod.modId,
+                                    mod.version,
+                                    minecraftVersion,
+                                    mod.loader.lowercase()
+                                )
+                                if (update == null && mod.modId.toLongOrNull() != null) {
+                                    Logging.i("ModUpdate", "Modrinth failed, trying CurseForge for ${mod.modName}")
+                                    update = CurseForgeUpdateHelper.checkUpdate(
+                                        mod.modId,
+                                        mod.version,
+                                        minecraftVersion
+                                    )
+                                }
+                                update
+                            }
+                            else -> {
+                                Logging.i("ModUpdate", "Unsupported loader: ${mod.loader} for ${mod.modName}")
+                                null
+                            }
                         }
+
                         if (update?.needsUpdate == true) {
-                            updates.add(update)
+                            Logging.i("ModUpdate", "Update available for ${mod.modName}: ${update.latestVersion}")
+                            updates.add(update.copy(originalFile = mod.file)) // Store original file for later deletion
+                        } else {
+                            Logging.i("ModUpdate", "No update for ${mod.modName}")
                         }
                     } catch (e: Exception) {
                         Logging.e("ModUpdate", "Failed to check ${mod.modName}", e)
@@ -74,16 +89,6 @@ object ModUpdateManager {
         }
     }
 
-    /**
-     * Download and install the given updates.
-     *
-     * @param context      Context for resources
-     * @param updates      List of updates to download
-     * @param gameDir      Game directory (where the 'mods' folder resides)
-     * @param onProgress   Called on UI thread with (current, total, fileName, progressPercent)
-     * @param onComplete   Called on UI thread when all downloads are done
-     * @param onError      Called on UI thread if any error occurs
-     */
     fun applyUpdates(
         context: Context,
         updates: List<ModUpdate>,
@@ -111,16 +116,16 @@ object ModUpdateManager {
                         .replace(" ", "_")
                     val targetFile = File(modsDir, fileName)
 
-                    // Avoid duplicate if already downloaded
                     if (targetFile.exists()) {
                         successCount++
                         TaskExecutors.runInUIThread {
                             onProgress(index + 1, total, fileName, 100)
                         }
+                        // If the new file already exists, we can optionally delete the old one
+                        update.originalFile?.takeIf { it.exists() && it != targetFile }?.delete()
                         return@forEachIndexed
                     }
 
-                    // Download with progress
                     var lastPercent = 0
                     ModDownloader.downloadWithProgress(
                         url = update.downloadUrl,
@@ -134,7 +139,10 @@ object ModUpdateManager {
                             }
                         }
                     )
+                    // Delete the old mod file after successful download
+                    update.originalFile?.takeIf { it.exists() && it != targetFile }?.delete()
                     successCount++
+                    Logging.i("ModUpdate", "Downloaded $fileName")
                 }
 
                 TaskExecutors.runInUIThread {

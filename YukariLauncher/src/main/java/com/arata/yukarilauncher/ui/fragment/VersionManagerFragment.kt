@@ -10,12 +10,8 @@ import com.arata.anim.AnimPlayer
 import com.arata.anim.animations.Animations
 import com.arata.yukarilauncher.R
 import com.arata.yukarilauncher.databinding.FragmentVersionManagerBinding
-import com.arata.yukarilauncher.feature.download.platform.curseforge.update.CurseForgeUpdateHelper
-import com.arata.yukarilauncher.feature.download.platform.modrinth.update.ModrinthUpdateHelper
-import com.arata.yukarilauncher.feature.download.platform.update.InstalledModsScanner
-import com.arata.yukarilauncher.feature.download.platform.update.ModDownloader
-import com.arata.yukarilauncher.feature.download.platform.update.ModUpdateManager
 import com.arata.yukarilauncher.feature.download.platform.update.ModUpdate
+import com.arata.yukarilauncher.feature.download.platform.update.ModUpdateManager
 import com.arata.yukarilauncher.feature.log.Logging
 import com.arata.yukarilauncher.feature.version.NoVersionException
 import com.arata.yukarilauncher.feature.version.Version
@@ -77,6 +73,24 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
         ZHTools.swapFragmentWithAnim(this, FilesFragment::class.java, FilesFragment.TAG, bundle)
     }
 
+    /**
+     * Extracts the pure Minecraft version (without loader suffix) from a Version object.
+     * Falls back to stripping common suffixes like " Fabric", " Forge", " NeoForge".
+     */
+    private fun getGameVersion(version: Version): String {
+        val versionInfo = version.getVersionInfo()
+        if (versionInfo != null && versionInfo.minecraftVersion.isNotBlank()) {
+            return versionInfo.minecraftVersion
+        }
+        // Fallback: strip known suffixes
+        val rawName = version.getVersionName()
+        return rawName
+            .replace(" Fabric", "")
+            .replace(" Forge", "")
+            .replace(" NeoForge", "")
+            .trim()
+    }
+
     override fun onClick(v: View) {
         val activity = requireActivity()
         val version = VersionsManager.getCurrentVersion() ?: run {
@@ -125,20 +139,23 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                         .showDialog()
                 }
 
+                // ============================================================
+                // MOD UPDATE CHECKER – using the improved ModUpdateManager
+                // ============================================================
                 checkUpdates -> {
                     binding.checkUpdates.isEnabled = false
                     val toast = Toast.makeText(activity, "Checking for updates...", Toast.LENGTH_SHORT)
                     toast.show()
 
                     val modsDir = File(gameDir, "mods").apply { if (!exists()) mkdirs() }
-                    val minecraftVersion = version.getVersionName()
+                    val minecraftVersion = getGameVersion(version)
+                    Logging.i("ModUpdate", "Using game version: $minecraftVersion")
 
                     ModUpdateManager.checkUpdates(
                         context = activity,
                         modsDir = modsDir,
                         minecraftVersion = minecraftVersion,
                         onProgress = { current, total, modName ->
-                            // Optional: update a progress bar or just keep the toast
                             toast.setText("Checking $modName ($current/$total)")
                         },
                         onComplete = { updates ->
@@ -148,14 +165,13 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                             if (updates.isEmpty()) {
                                 Toast.makeText(activity, "All mods are up to date!", Toast.LENGTH_LONG).show()
                             } else {
-                                val message = updates.joinToString("\n") {
-                                    "${it.modName} → ${it.latestVersion}"
+                                val message = updates.joinToString(separator = "\n") { update ->
+                                    "${update.modName} → ${update.latestVersion}"
                                 }
                                 AlertDialog.Builder(activity)
                                     .setTitle("Mod Updates Available")
                                     .setMessage(message)
                                     .setPositiveButton("Update All") { _, _ ->
-                                        // Show download progress
                                         val progressToast = Toast.makeText(activity, "Downloading...", Toast.LENGTH_LONG)
                                         progressToast.show()
 

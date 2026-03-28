@@ -6,5 +6,6 @@ data class ModUpdate(
     val currentVersion: String,
     val latestVersion: String,
     val downloadUrl: String,
-    val needsUpdate: Boolean
+    val needsUpdate: Boolean,
+    val originalFile: File? = null
 )
