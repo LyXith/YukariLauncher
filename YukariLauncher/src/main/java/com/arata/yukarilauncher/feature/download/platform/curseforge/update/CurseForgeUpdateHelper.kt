@@ -15,7 +15,20 @@ object CurseForgeUpdateHelper {
         if (file.exists()) file.readText().trim() else ""
     }
 
-    fun checkUpdate(modId: String, currentVersion: String, minecraftVersion: String): ModUpdate? {
+    private fun versionsEquivalent(current: String, latest: String): Boolean {
+        val normalizedCurrent = current.trim().lowercase()
+            .removePrefix("v")
+            .replace(" ", "")
+        val normalizedLatest = latest.trim().lowercase()
+            .removePrefix("v")
+            .replace(" ", "")
+        return normalizedCurrent.isNotBlank() &&
+            normalizedCurrent != "unknown" &&
+            !normalizedCurrent.contains("\${") &&
+            normalizedCurrent == normalizedLatest
+    }
+
+    fun checkUpdate(modId: String, currentVersion: String, minecraftVersion: String, currentFileName: String? = null): ModUpdate? {
         val url = "$BASE_URL/mods/$modId/files?gameVersion=$minecraftVersion"
         val request = Request.Builder()
             .url(url)
@@ -31,15 +44,29 @@ object CurseForgeUpdateHelper {
             val latestVersion = latest.getString("displayName")
             val downloadUrl = latest.getString("downloadUrl")
             val fileName = latest.getString("fileName")  // e.g., "Sodium-0.8.7+mc1.21.11.jar"
+            val installedIndex = currentFileName?.let { installed ->
+                (0 until data.length()).firstOrNull { i ->
+                    installed.equals(data.getJSONObject(i).optString("fileName"), ignoreCase = true)
+                }
+            }
+            val needsUpdate = when {
+                installedIndex != null -> installedIndex != 0
+                else -> !versionsEquivalent(currentVersion, latestVersion)
+            }
+            val resolvedCurrentVersion = if (installedIndex != null) {
+                data.getJSONObject(installedIndex).optString("displayName", currentVersion)
+            } else {
+                currentVersion
+            }
 
             return ModUpdate(
                 modId = modId,
                 modName = latest.getString("fileName"),
-                currentVersion = currentVersion,
+                currentVersion = resolvedCurrentVersion,
                 latestVersion = latestVersion,
                 downloadUrl = downloadUrl,
                 fileName = fileName,
-                needsUpdate = currentVersion != latestVersion
+                needsUpdate = needsUpdate
             )
         }
     }

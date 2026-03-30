@@ -38,7 +38,8 @@ object ModUpdateManager {
                                     mod.modId,
                                     mod.version,
                                     minecraftVersion,
-                                    mod.loader.lowercase()
+                                    mod.loader.lowercase(),
+                                    mod.file.name
                                 )
                             }
                             "forge", "neoforge" -> {
@@ -47,14 +48,16 @@ object ModUpdateManager {
                                     mod.modId,
                                     mod.version,
                                     minecraftVersion,
-                                    mod.loader.lowercase()
+                                    mod.loader.lowercase(),
+                                    mod.file.name
                                 )
                                 if (update == null && mod.modId.toLongOrNull() != null) {
                                     Logging.i("ModUpdate", "Modrinth failed, trying CurseForge for ${mod.modName}")
                                     update = CurseForgeUpdateHelper.checkUpdate(
                                         mod.modId,
                                         mod.version,
-                                        minecraftVersion
+                                        minecraftVersion,
+                                        mod.file.name
                                     )
                                 }
                                 update
