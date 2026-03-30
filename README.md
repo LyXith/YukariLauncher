@@ -3,7 +3,6 @@ this is just my ordinary used.
 * Changing default control with my own
 * Changing color accent with purple
 * Add Mods Updater (still buggy)
-* Add terminal (useless)
 * Add fixes Axiom mod
 # 
 <div align="center">
