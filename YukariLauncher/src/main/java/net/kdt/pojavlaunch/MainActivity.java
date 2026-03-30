@@ -565,7 +565,6 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
             this.binding.openMemoryInfo.setChecked(AllSettings.getGameMenuShowMemory().getValue());
             this.binding.openFpsInfo.setChecked(AllSettings.getGameMenuShowFPS().getValue());
             this.binding.disableGestures.setChecked(AllSettings.getDisableGestures().getValue());
-            this.binding.forceGuiInput.setChecked(AllSettings.getForceGuiInput().getValue());
             this.binding.disableDoubleTap.setChecked(AllSettings.getDisableDoubleTap().getValue());
             this.binding.enableGyro.setChecked(AllSettings.getEnableGyro().getValue());
             this.binding.gyroInvertX.setChecked(AllSettings.getGyroInvertX().getValue());
@@ -589,9 +588,6 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
 
             this.binding.disableGestures.setOnCheckedChangeListener(this);
             this.binding.disableGesturesLayout.setOnClickListener(this);
-
-            this.binding.forceGuiInput.setOnCheckedChangeListener(this);
-            this.binding.forceGuiInputLayout.setOnClickListener(this);
 
             this.binding.disableDoubleTap.setOnCheckedChangeListener(this);
             this.binding.disableDoubleTapLayout.setOnClickListener(this);
@@ -695,7 +691,6 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
             else if (v == binding.resolutionScalerRemove) MenuUtils.adjustSeekbar(binding.resolutionScaler, -1);
             else if (v == binding.resolutionScalerAdd) MenuUtils.adjustSeekbar(binding.resolutionScaler, 1);
             else if (v == binding.disableGesturesLayout) MenuUtils.toggleSwitchState(binding.disableGestures);
-            else if (v == binding.forceGuiInputLayout) MenuUtils.toggleSwitchState(binding.forceGuiInput);
             else if (v == binding.disableDoubleTapLayout) MenuUtils.toggleSwitchState(binding.disableDoubleTap);
             else if (v == binding.timeLongPressTriggerRemove) MenuUtils.adjustSeekbar(binding.timeLongPressTrigger, -1);
             else if (v == binding.timeLongPressTriggerAdd) MenuUtils.adjustSeekbar(binding.timeLongPressTrigger, 1);
@@ -773,10 +768,6 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
             } else if (v == binding.disableGestures) {
                 refreshLayoutVisible(binding.timeLongPressTriggerLayout, !isChecked);
                 AllSettings.getDisableGestures().put(isChecked).save();
-            } else if (v == binding.forceGuiInput) {
-                AllSettings.getForceGuiInput().put(isChecked).save();
-                AllStaticSettings.forceGuiInput = isChecked;
-                MainActivity.binding.mainGameRenderView.refreshTouchProcessor();
             } else if (v == binding.disableDoubleTap) {
                 AllSettings.getDisableDoubleTap().put(isChecked).save();
                 AllStaticSettings.disableDoubleTap = isChecked;
