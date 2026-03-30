@@ -517,6 +517,8 @@
     <string name="setting_launcher_theme_system">Follow System Theme</string>
     <string name="setting_launcher_theme_light">Light Mode</string>
     <string name="setting_launcher_theme_dark">Dark Mode</string>
+    <string name="setting_launcher_theme_battery">Battery Saver Dark</string>
+    <string name="setting_launcher_theme_auto_time">Auto by Time</string>
     <string name="setting_enable_log_output_title">Open Log Output When Launching Game</string>
     <string name="setting_enable_log_output_desc">Enable the log output interface when the application officially starts the game</string>
     <string name="setting_animation_title">Enable Animations</string>
