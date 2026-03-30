@@ -22,7 +22,7 @@ val getCFApiKey = {
 }
 
 val getBuildType = {
-    val buildType = System.getenv("ZL_BUILD_TYPE") ?: "DEBUG"
+    val buildType = System.getenv("YL_BUILD_TYPE") ?: "DEBUG"
     logger.warn("BUILD: Build Type --> $buildType")
     buildType
 }
@@ -160,7 +160,7 @@ android {
 // because I'm build on Termux this only i can find (29.0.14206865)
 // https://github.com/lzhiyong/termux-ndk/releases
     ndkVersion = "29.0.14206865"
-
+    
     externalNativeBuild {
         ndkBuild {
             path = file("src/main/jni/Android.mk")
@@ -168,8 +168,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
 
     packaging {
@@ -187,7 +187,7 @@ android {
 
     buildToolsVersion = "34.0.0"
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = "1.8"
     }
 }
 
