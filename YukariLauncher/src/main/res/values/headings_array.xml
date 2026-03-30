@@ -25,14 +25,17 @@
     <string-array name="launcher_theme_names">
         <item>@string/setting_launcher_theme_system</item>
         <item>@string/setting_launcher_theme_light</item>
-        <item>@string/setting_launcher_theme_dark</item> <!-- New -->
+        <item>@string/setting_launcher_theme_dark</item>
+        <item>@string/setting_launcher_theme_battery</item>
+        <item>@string/setting_launcher_theme_auto_time</item>
     </string-array>
 
     <string-array name="launcher_theme_values">
         <item>system</item>
         <item>light</item>
         <item>dark</item>
-        <item>purple</item> <!-- New -->
+        <item>battery</item>
+        <item>auto_time</item>
     </string-array>
 
     <!-- Game menu positioning -->

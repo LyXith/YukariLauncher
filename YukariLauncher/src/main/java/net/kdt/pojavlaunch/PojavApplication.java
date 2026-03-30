@@ -31,7 +31,6 @@ import java.io.File;
 import java.io.PrintStream;
 import java.text.DateFormat;
 import java.util.Date;
-import java.util.Objects;
 
 public class PojavApplication extends Application {
 	public static final String CRASH_REPORT_TAG = "YukariCrashReport";
@@ -86,15 +85,23 @@ public class PojavApplication extends Application {
 
 		//设置主题
 		String launcherTheme = AllSettings.getLauncherTheme().getValue();
-		if (!Objects.equals(launcherTheme, "system")) {
-			switch (launcherTheme) {
-				case "light" :
-					AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
-					break;
-				case "dark" :
-					AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
-					break;
-			}
+		switch (launcherTheme) {
+			case "light":
+				AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+				break;
+			case "dark":
+				AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+				break;
+			case "battery":
+				AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+				break;
+			case "auto_time":
+				AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_AUTO_TIME);
+				break;
+			case "system":
+			default:
+				AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
+				break;
 		}
 	}
 
