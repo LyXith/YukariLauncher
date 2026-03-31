@@ -5,7 +5,6 @@ import com.arata.yukarilauncher.feature.version.Version
 import com.arata.yukarilauncher.utils.file.FileTools
 import com.arata.yukarilauncher.feature.customprofilepath.ProfilePathHome
 import com.google.gson.JsonArray
-import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import net.kdt.pojavlaunch.Tools
 import net.kdt.pojavlaunch.modloaders.modpacks.api.ApiHandler
@@ -55,8 +54,8 @@ class ModPackExportHelper {
             ZipOutputStream(FileOutputStream(exportFile)).use { zos ->
                 when (exportType) {
                     ExportType.MODRINTH -> {
-                        val indexedFiles = selectModrinthIndexedFiles(includedFiles)
-                        val resolvedProjects = resolveModrinthProjects(indexedFiles)
+                        val resolvedProjects = resolveModrinthProjects(includedFiles)
+                        val indexedFiles = includedFiles.filter { resolvedProjects.containsKey(it.first) }
                         val index = buildModrinthIndex(version, dependencies, options, indexedFiles, resolvedProjects)
                         writeJsonEntry(zos, "modrinth.index.json", index)
                         val overrideFiles = includedFiles.filterNot { filePair -> indexedFiles.any { it.first == filePair.first } }
@@ -105,17 +104,9 @@ class ModPackExportHelper {
             }
         }
 
-        private fun selectModrinthIndexedFiles(includedFiles: List<Pair<String, File>>): List<Pair<String, File>> {
-            return includedFiles.filter { (path, file) ->
-                path.startsWith("mods/") && file.extension.equals("jar", ignoreCase = true)
-            }
-        }
-
         private fun selectCurseManifestFiles(includedFiles: List<Pair<String, File>>): List<Pair<String, File>> {
             return includedFiles.filter { (path, file) ->
-                if (!path.startsWith("mods/")) return@filter false
-                val ids = parseCurseIds(file.name)
-                ids.first != 0L && ids.second != 0L
+                path.startsWith("mods/") && file.extension.equals("jar", ignoreCase = true)
             }
         }
 
@@ -242,10 +233,10 @@ class ModPackExportHelper {
             return "<ul>\n$listItems\n</ul>"
         }
 
-        private fun resolveModrinthProjects(indexedFiles: List<Pair<String, File>>): Map<String, ResolvedProject> {
-            if (indexedFiles.isEmpty()) return emptyMap()
+        private fun resolveModrinthProjects(candidateFiles: List<Pair<String, File>>): Map<String, ResolvedProject> {
+            if (candidateFiles.isEmpty()) return emptyMap()
             return runCatching {
-                val hashToPath = indexedFiles.associate { FileTools.calculateFileHash(it.second, "SHA-1") to it.first }
+                val hashToPath = candidateFiles.associate { FileTools.calculateFileHash(it.second, "SHA-1") to it.first }
                 val payload = JsonObject().apply {
                     addProperty("algorithm", "sha1")
                     add("hashes", JsonArray().apply { hashToPath.keys.forEach { add(it) } })
@@ -259,6 +250,7 @@ class ModPackExportHelper {
                     val projectId = versionObject["project_id"]?.asString
                     val fileArray = versionObject["files"]?.asJsonArray
                     val downloadUrl = fileArray?.firstOrNull()?.asJsonObject?.get("url")?.asString
+                    if (projectId.isNullOrBlank() || downloadUrl.isNullOrBlank()) return@forEach
                     results[path] = ResolvedProject(
                         downloadUrl = downloadUrl,
                         projectSlug = projectId
@@ -283,24 +275,41 @@ class ModPackExportHelper {
                 val jsonObject = Tools.GLOBAL_GSON.fromJson(response, JsonObject::class.java)
                 val data = jsonObject["data"]?.asJsonObject ?: return emptyMap()
                 val exactMatches = data["exactMatches"]?.asJsonArray ?: return emptyMap()
+                val modInfoCache = mutableMapOf<Long, ResolvedProject>()
 
                 val results = mutableMapOf<String, ResolvedProject>()
                 exactMatches.forEach { element ->
                     val fileObj = element.asJsonObject["file"]?.asJsonObject ?: return@forEach
                     val fingerprint = fileObj["packageFingerprint"]?.asLong ?: return@forEach
                     val path = fingerprints[fingerprint] ?: return@forEach
-                    val modObj = fileObj["mods"]?.asJsonArray?.firstOrNull()?.asJsonObject
-                    val author = modObj?.get("authors")?.asJsonArray?.firstOrNull()?.asJsonObject?.get("name")?.asString
+                    val modId = fileObj["modId"]?.asLong ?: return@forEach
+                    val modInfo = modInfoCache.getOrPut(modId) {
+                        resolveCurseForgeModInfo(headers, modId)
+                    }
                     results[path] = ResolvedProject(
-                        projectId = fileObj["modId"]?.asLong,
+                        projectId = modId,
                         fileId = fileObj["id"]?.asLong,
-                        projectSlug = modObj?.get("slug")?.asString,
-                        projectTitle = modObj?.get("name")?.asString,
-                        projectAuthor = author
+                        projectSlug = modInfo.projectSlug,
+                        projectTitle = modInfo.projectTitle,
+                        projectAuthor = modInfo.projectAuthor
                     )
                 }
                 results
             }.getOrDefault(emptyMap())
+        }
+
+        private fun resolveCurseForgeModInfo(headers: Map<String, String>, modId: Long): ResolvedProject {
+            return runCatching {
+                val response = ApiHandler.getRaw(headers, "$CURSEFORGE_API/mods/$modId") ?: return ResolvedProject()
+                val jsonObject = Tools.GLOBAL_GSON.fromJson(response, JsonObject::class.java)
+                val data = jsonObject["data"]?.asJsonObject ?: return ResolvedProject()
+                val firstAuthor = data["authors"]?.asJsonArray?.firstOrNull()?.asJsonObject?.get("name")?.asString
+                ResolvedProject(
+                    projectSlug = data["slug"]?.asString,
+                    projectTitle = data["name"]?.asString,
+                    projectAuthor = firstAuthor
+                )
+            }.getOrDefault(ResolvedProject())
         }
 
         private fun calcCurseFingerprint(file: File): Long {
