@@ -22,7 +22,6 @@ class ModPackExportHelper {
 
     data class ExportOptions(
         val includePaths: Set<String> = emptySet(),
-        val excludePaths: Set<String> = setOf("logs", "crash-reports"),
         val packName: String? = null,
         val packVersion: String? = null,
         val author: String? = null
@@ -81,10 +80,7 @@ class ModPackExportHelper {
             if (relativePath.isBlank()) return false
             val normalizedPath = relativePath.trim('/')
             val include = options.includePaths
-            val exclude = options.excludePaths
-
-            if (exclude.any { normalizedPath == it || normalizedPath.startsWith("$it/") }) return false
-            if (include.isEmpty()) return true
+            if (include.isEmpty()) return false
             return include.any { normalizedPath == it || normalizedPath.startsWith("$it/") }
         }
 
@@ -318,9 +314,8 @@ class ModPackExportHelper {
         }
 
         private fun calcCurseFingerprint(file: File): Long {
-            val bytes = file.readBytes().filter { it.toInt().toChar().isLetterOrDigit() || !it.toInt().toChar().isWhitespace() }
-                .toByteArray()
-            return murmur2(bytes, 1).toLong()
+            val hash = murmur2(file.readBytes(), 1)
+            return hash.toLong() and 0xffffffffL
         }
 
         private fun murmur2(data: ByteArray, seed: Int): Int {

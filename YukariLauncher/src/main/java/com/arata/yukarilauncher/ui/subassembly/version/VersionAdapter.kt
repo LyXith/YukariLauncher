@@ -252,31 +252,18 @@ class VersionAdapter(
                 title = context.getString(R.string.version_manager_export_modpack_include_title),
                 defaultChecked = emptySet()
             ) { includePaths ->
-                showExcludeDialog(version, exportType, includePaths)
-            }.show()
-        }
-
-        private fun showExcludeDialog(
-            version: Version,
-            exportType: ModPackExportHelper.ExportType,
-            includePaths: Set<String>
-        ) {
-            val context = parentFragment.requireActivity()
-            ExportPathPickerDialog(
-                context = context,
-                rootDir = version.getGameDir(),
-                title = context.getString(R.string.version_manager_export_modpack_exclude_title),
-                defaultChecked = setOf("logs", "crash-reports")
-            ) { excludePaths ->
-                showMetadataDialog(version, exportType, includePaths, excludePaths)
+                if (includePaths.isEmpty()) {
+                    Toast.makeText(context, R.string.version_manager_export_modpack_select_required, Toast.LENGTH_SHORT).show()
+                    return@ExportPathPickerDialog
+                }
+                showMetadataDialog(version, exportType, includePaths)
             }.show()
         }
 
         private fun showMetadataDialog(
             version: Version,
             exportType: ModPackExportHelper.ExportType,
-            includePaths: Set<String>,
-            excludePaths: Set<String>
+            includePaths: Set<String>
         ) {
             val context = parentFragment.requireActivity()
             EditTextDialog.Builder(context)
@@ -304,7 +291,6 @@ class VersionAdapter(
                                         exportType,
                                         ModPackExportHelper.ExportOptions(
                                             includePaths = includePaths,
-                                            excludePaths = excludePaths,
                                             packName = packName,
                                             packVersion = packVersion,
                                             author = authorEditText.text.toString()
