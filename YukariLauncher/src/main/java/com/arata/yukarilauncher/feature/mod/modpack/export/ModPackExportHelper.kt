@@ -38,19 +38,21 @@ class ModPackExportHelper {
             ZipOutputStream(FileOutputStream(exportFile)).use { zos ->
                 when (exportType) {
                     ExportType.MODRINTH -> {
-                        val index = buildModrinthIndex(version, dependencies, options, includedFiles)
+                        val indexedFiles = selectModrinthIndexedFiles(includedFiles)
+                        val index = buildModrinthIndex(version, dependencies, options, indexedFiles)
                         writeJsonEntry(zos, "modrinth.index.json", index)
+                        val overrideFiles = includedFiles.filterNot { filePair -> indexedFiles.any { it.first == filePair.first } }
+                        zipOverrides(zos, overrideFiles)
                     }
 
                     ExportType.CURSEFORGE -> {
-                        val manifest = buildCurseManifest(version, dependencies, options, includedFiles)
+                        val manifestFiles = selectCurseManifestFiles(includedFiles)
+                        val manifest = buildCurseManifest(version, dependencies, options, manifestFiles)
                         writeJsonEntry(zos, "manifest.json", manifest)
                         writeHtmlEntry(zos, "modlist.html", buildModListHtml(includedFiles))
+                        val overrideFiles = includedFiles.filterNot { filePair -> manifestFiles.any { it.first == filePair.first } }
+                        zipOverrides(zos, overrideFiles)
                     }
-                }
-
-                includedFiles.forEach { (path, file) ->
-                    FileTools.zipFile(file, "overrides/$path", zos)
                 }
             }
 
@@ -78,6 +80,26 @@ class ModPackExportHelper {
                 .toList()
         }
 
+        private fun zipOverrides(zos: ZipOutputStream, overrideFiles: List<Pair<String, File>>) {
+            overrideFiles.forEach { (path, file) ->
+                FileTools.zipFile(file, "overrides/$path", zos)
+            }
+        }
+
+        private fun selectModrinthIndexedFiles(includedFiles: List<Pair<String, File>>): List<Pair<String, File>> {
+            return includedFiles.filter { (path, file) ->
+                path.startsWith("mods/") && file.extension.equals("jar", ignoreCase = true)
+            }
+        }
+
+        private fun selectCurseManifestFiles(includedFiles: List<Pair<String, File>>): List<Pair<String, File>> {
+            return includedFiles.filter { (path, file) ->
+                if (!path.startsWith("mods/")) return@filter false
+                val ids = parseCurseIds(file.name)
+                ids.first != 0L && ids.second != 0L
+            }
+        }
+
         private fun buildDependencies(version: Version): MutableMap<String, String> {
             val dependencies = mutableMapOf<String, String>()
             version.getVersionInfo()?.let { info ->
@@ -100,9 +122,9 @@ class ModPackExportHelper {
             version: Version,
             dependencies: Map<String, String>,
             options: ExportOptions,
-            includedFiles: List<Pair<String, File>>
+            indexedFiles: List<Pair<String, File>>
         ): Map<String, Any> {
-            val files = includedFiles.map { (path, file) ->
+            val files = indexedFiles.map { (path, file) ->
                 mapOf(
                     "path" to path,
                     "hashes" to mapOf(
@@ -131,10 +153,9 @@ class ModPackExportHelper {
             versionObj: Version,
             dependencies: Map<String, String>,
             options: ExportOptions,
-            includedFiles: List<Pair<String, File>>
+            manifestFiles: List<Pair<String, File>>
         ): Map<String, Any> {
-            val curseFiles = includedFiles
-                .filter { (path, _) -> path.startsWith("mods/") }
+            val curseFiles = manifestFiles
                 .map { (path, file) ->
                     val parsedIds = parseCurseIds(file.name)
                     mapOf(
