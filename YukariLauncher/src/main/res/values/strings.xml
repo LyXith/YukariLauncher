@@ -371,6 +371,8 @@
     <string name="custom_background_add">Add Background Image</string>
     <string name="custom_background_title">Custom Launcher Background Image</string>
     <string name="custom_background_desc">Open the launcher background icon management interface, where you can add your favorite background images and set different backgrounds for different interfaces</string>
+    <string name="custom_background_blur_title">Launcher Background Blur</string>
+    <string name="custom_background_blur_desc">Set custom launcher background blur from 0 (off) to 25 (maximum)</string>
     <string name="custom_background_main_menu">Main Menu</string>
     <string name="custom_background_in_game">In-Game Interface</string>
     <string name="custom_background_dialog_message">Click the \"Select\" button to set this image as the background for %s</string>

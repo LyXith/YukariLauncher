@@ -7,6 +7,7 @@ import com.bumptech.glide.Glide
 import com.arata.yukarilauncher.InfoDistributor
 import com.arata.yukarilauncher.R
 import com.arata.yukarilauncher.feature.log.Logging
+import com.arata.yukarilauncher.setting.AllSettings
 import com.arata.yukarilauncher.utils.path.PathManager
 import com.arata.yukarilauncher.utils.file.FileTools.Companion.mkdirs
 import com.arata.yukarilauncher.utils.image.ImageUtils.Companion.isImage
@@ -70,10 +71,17 @@ object BackgroundManager {
             return
         }
 
-        Glide.with(context).load(backgroundImage)
+        val blurRadius = AllSettings.customBackgroundBlur.getValue().coerceIn(0, 25)
+        val request = Glide.with(context).load(backgroundImage)
             .override(backgroundView.width, backgroundView.height)
-            .transform(CenterCrop(), BlurTransformation(25, 1))
-            .into(CallbackDrawableImageViewTarget(backgroundView, callback))
+
+        if (blurRadius == 0) {
+            request.transform(CenterCrop())
+        } else {
+            request.transform(CenterCrop(), BlurTransformation(blurRadius, 1))
+        }
+
+        request.into(CallbackDrawableImageViewTarget(backgroundView, callback))
     }
 
     @JvmStatic

@@ -167,6 +167,9 @@ class AllSettings {
         val launcherTheme = StringSettingUnit("launcherTheme", "system")
 
         @JvmStatic
+        val customBackgroundBlur = IntSettingUnit("customBackgroundBlur", 25)
+
+        @JvmStatic
         val animation = BooleanSettingUnit("animation", true)
 
         @JvmStatic

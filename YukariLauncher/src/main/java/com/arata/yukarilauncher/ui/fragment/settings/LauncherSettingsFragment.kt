@@ -1,6 +1,8 @@
 package com.arata.yukarilauncher.ui.fragment.settings
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -8,6 +10,7 @@ import com.arata.anim.AnimPlayer
 import com.arata.anim.animations.Animations
 import com.arata.yukarilauncher.R
 import com.arata.yukarilauncher.databinding.SettingsFragmentLauncherBinding
+import com.arata.yukarilauncher.event.single.MainBackgroundChangeEvent
 import com.arata.yukarilauncher.event.single.PageOpacityChangeEvent
 import com.arata.yukarilauncher.feature.update.UpdateUtils
 import com.arata.yukarilauncher.setting.AllSettings
@@ -25,6 +28,10 @@ import org.greenrobot.eventbus.EventBus
 class LauncherSettingsFragment() : AbstractSettingsFragment(R.layout.settings_fragment_launcher, SettingCategory.LAUNCHER) {
     private lateinit var binding: SettingsFragmentLauncherBinding
     private var parentFragment: FragmentWithAnim? = null
+    private val blurUpdateHandler = Handler(Looper.getMainLooper())
+    private val blurUpdateRunnable = Runnable {
+        EventBus.getDefault().post(MainBackgroundChangeEvent())
+    }
 
     constructor(parentFragment: FragmentWithAnim?) : this() {
         this.parentFragment = parentFragment
@@ -113,6 +120,20 @@ class LauncherSettingsFragment() : AbstractSettingsFragment(R.layout.settings_fr
             }
         }
 
+        SeekBarSettingsWrapper(
+            context,
+            AllSettings.customBackgroundBlur,
+            binding.customBackgroundBlurLayout,
+            binding.customBackgroundBlurTitle,
+            binding.customBackgroundBlurSummary,
+            binding.customBackgroundBlurValue,
+            binding.customBackgroundBlur,
+            ""
+        ).setOnSeekBarProgressChangeListener {
+            blurUpdateHandler.removeCallbacks(blurUpdateRunnable)
+            blurUpdateHandler.postDelayed(blurUpdateRunnable, 120L)
+        }
+
         SwitchSettingsWrapper(
             context,
             AllSettings.animation,
@@ -186,6 +207,12 @@ class LauncherSettingsFragment() : AbstractSettingsFragment(R.layout.settings_fr
             binding.notificationPermissionRequest
         )
         setupNotificationRequestPreference(notificationPermissionRequest)
+    }
+
+
+    override fun onDestroyView() {
+        blurUpdateHandler.removeCallbacks(blurUpdateRunnable)
+        super.onDestroyView()
     }
 
     override fun slideIn(animPlayer: AnimPlayer) {
