@@ -1,8 +1,9 @@
 # Yukari Launcher is Fork of Zalith Launcher
 this is just my ordinary used.
 * Changing default control with my own
-* Changing color accent with purple
-* Add Mods Updater (still buggy)
+* Changing UI
+* Add Mods Update check
+* Add Modpack export (CurseForge still can't use)
 * Add fixes Axiom mod
 # 
 <div align="center">
