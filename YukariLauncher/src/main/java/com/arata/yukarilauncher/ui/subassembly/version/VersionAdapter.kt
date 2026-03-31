@@ -4,12 +4,14 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
+import android.widget.Toast
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.PopupWindow
 import android.widget.RadioButton
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.RecyclerView
@@ -18,14 +20,17 @@ import com.arata.yukarilauncher.R
 import com.arata.yukarilauncher.databinding.ItemVersionBinding
 import com.arata.yukarilauncher.databinding.ViewVersionManagerBinding
 import com.arata.yukarilauncher.feature.customprofilepath.ProfilePathManager
+import com.arata.yukarilauncher.feature.mod.modpack.export.ModPackExportHelper
 import com.arata.yukarilauncher.feature.version.Version
 import com.arata.yukarilauncher.feature.version.utils.VersionIconUtils
 import com.arata.yukarilauncher.feature.version.VersionsManager
 import com.arata.yukarilauncher.task.Task
+import com.arata.yukarilauncher.task.TaskExecutors
 import com.arata.yukarilauncher.ui.dialog.TipDialog
 import com.arata.yukarilauncher.ui.fragment.FilesFragment
 import com.arata.yukarilauncher.utils.ZHTools
 import com.arata.yukarilauncher.utils.file.FileDeletionHandler
+import com.arata.yukarilauncher.utils.file.FileTools
 import net.kdt.pojavlaunch.Tools
 
 class VersionAdapter(
@@ -197,6 +202,7 @@ class VersionAdapter(
                         gamePath -> swapPath(version.getGameDir().absolutePath)
                         rename -> VersionsManager.openRenameDialog(context, version)
                         copy -> VersionsManager.openCopyDialog(context, version)
+                        exportModpack -> showExportDialog(version)
                         delete -> deleteVersion(version, context.getString(R.string.version_manager_delete_tip, version.getVersionName()))
                         else -> {}
                     }
@@ -206,6 +212,7 @@ class VersionAdapter(
                 gamePath.setOnClickListener(onClickListener)
                 rename.setOnClickListener(onClickListener)
                 copy.setOnClickListener(onClickListener)
+                exportModpack.setOnClickListener(onClickListener)
                 delete.setOnClickListener(onClickListener)
             }
             managerPopupWindow.apply {
@@ -215,6 +222,37 @@ class VersionAdapter(
                 this.height = viewBinding.root.measuredHeight
                 showAsDropDown(anchorView, anchorView.measuredWidth, 0)
             }
+        }
+
+        private fun showExportDialog(version: Version) {
+            val context = parentFragment.requireActivity()
+            val labels = arrayOf(
+                context.getString(R.string.version_manager_export_modpack_modrinth),
+                context.getString(R.string.version_manager_export_modpack_curseforge)
+            )
+            val types = arrayOf(
+                ModPackExportHelper.ExportType.MODRINTH,
+                ModPackExportHelper.ExportType.CURSEFORGE
+            )
+
+            AlertDialog.Builder(context, R.style.CustomAlertDialogTheme)
+                .setTitle(R.string.version_manager_export_modpack)
+                .setItems(labels) { _, which ->
+                    Task.runTask {
+                        ModPackExportHelper.export(version, types[which])
+                    }.setExecutor(TaskExecutors.getDefault())
+                        .ended(TaskExecutors.getAndroidUI()) { file ->
+                            if (file == null || !file.exists()) return@ended
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.version_manager_export_modpack_success, file.name),
+                                Toast.LENGTH_LONG
+                            ).show()
+                            FileTools.shareFile(context, file)
+                        }.onThrowable(TaskExecutors.getAndroidUI()) {
+                            Tools.showError(context, it)
+                        }.execute()
+                }.show()
         }
 
         private fun swapPath(path: String) {
