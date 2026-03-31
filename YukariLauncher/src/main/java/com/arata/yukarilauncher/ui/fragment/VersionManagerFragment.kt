@@ -4,6 +4,9 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import com.arata.anim.AnimPlayer
@@ -91,6 +94,90 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
             .trim()
     }
 
+    private fun createProgressDialog(title: String): Triple<AlertDialog, TextView, ProgressBar> {
+        val activity = requireActivity()
+        val container = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            val padding = (16 * resources.displayMetrics.density).toInt()
+            setPadding(padding, padding, padding, padding)
+        }
+        val messageView = TextView(activity).apply {
+            textSize = 14f
+        }
+        val progressBar = ProgressBar(
+            activity,
+            null,
+            android.R.attr.progressBarStyleHorizontal
+        ).apply {
+            max = 100
+            progress = 0
+        }
+        container.addView(messageView)
+        container.addView(progressBar)
+
+        val dialog = AlertDialog.Builder(activity)
+            .setTitle(title)
+            .setView(container)
+            .setCancelable(false)
+            .create()
+
+        return Triple(dialog, messageView, progressBar)
+    }
+
+    private fun showUpdateSelectionDialog(activity: android.app.Activity, updates: List<ModUpdate>, gameDir: File) {
+        val labels = updates.map { "${it.modName}: ${it.currentVersion} → ${it.latestVersion}" }.toTypedArray()
+        val checked = BooleanArray(updates.size) { true }
+
+        AlertDialog.Builder(activity)
+            .setTitle("Select mods to update")
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                checked[which] = isChecked
+            }
+            .setPositiveButton("Continue") { _, _ ->
+                val selectedUpdates = updates.filterIndexed { index, _ -> checked[index] }
+                if (selectedUpdates.isEmpty()) {
+                    Toast.makeText(activity, "No mods selected for update.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+
+                val summary = selectedUpdates.joinToString(separator = "\n") {
+                    "${it.modName} → ${it.latestVersion}"
+                }
+
+                AlertDialog.Builder(activity)
+                    .setTitle("Confirm updates")
+                    .setMessage("Update ${selectedUpdates.size} selected mods?\n\n$summary")
+                    .setPositiveButton("Update") { _, _ ->
+                        val (downloadDialog, messageView, progressBar) = createProgressDialog("Updating mods")
+                        downloadDialog.show()
+                        messageView.text = "Preparing downloads..."
+
+                        ModUpdateManager.applyUpdates(
+                            context = activity,
+                            updates = selectedUpdates,
+                            gameDir = gameDir,
+                            onProgress = { current, total, fileName, percent ->
+                                val overallPercent = (((current - 1) * 100) + percent) / total
+                                progressBar.progress = overallPercent
+                                messageView.text = "Downloading ($current/$total)\n$fileName ($percent%)"
+                            },
+                            onComplete = {
+                                downloadDialog.dismiss()
+                                Toast.makeText(activity, "Selected updates completed.", Toast.LENGTH_LONG).show()
+                            },
+                            onError = { e ->
+                                downloadDialog.dismiss()
+                                Tools.showError(activity, "Update failed: ${e.message}", e)
+                            }
+                        )
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     override fun onClick(v: View) {
         val activity = requireActivity()
         val version = VersionsManager.getCurrentVersion() ?: run {
@@ -144,8 +231,9 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                 // ============================================================
                 checkUpdates -> {
                     binding.checkUpdates.isEnabled = false
-                    val toast = Toast.makeText(activity, "Checking for updates...", Toast.LENGTH_SHORT)
-                    toast.show()
+                    val (checkingDialog, messageView, progressBar) = createProgressDialog("Checking mod updates")
+                    checkingDialog.show()
+                    messageView.text = "Scanning mods..."
 
                     val modsDir = File(gameDir, "mods").apply { if (!exists()) mkdirs() }
                     val minecraftVersion = getGameVersion(version)
@@ -156,48 +244,21 @@ class VersionManagerFragment : FragmentWithAnim(R.layout.fragment_version_manage
                         modsDir = modsDir,
                         minecraftVersion = minecraftVersion,
                         onProgress = { current, total, modName ->
-                            toast.setText("Checking $modName ($current/$total)")
+                            progressBar.progress = if (total == 0) 0 else current * 100 / total
+                            messageView.text = "Checking ($current/$total)\n$modName"
                         },
                         onComplete = { updates ->
-                            toast.cancel()
+                            checkingDialog.dismiss()
                             binding.checkUpdates.isEnabled = true
 
                             if (updates.isEmpty()) {
                                 Toast.makeText(activity, "All mods are up to date!", Toast.LENGTH_LONG).show()
                             } else {
-                                val message = updates.joinToString(separator = "\n") { update ->
-                                    "${update.modName} → ${update.latestVersion}"
-                                }
-                                AlertDialog.Builder(activity)
-                                    .setTitle("Mod Updates Available")
-                                    .setMessage(message)
-                                    .setPositiveButton("Update All") { _, _ ->
-                                        val progressToast = Toast.makeText(activity, "Downloading...", Toast.LENGTH_LONG)
-                                        progressToast.show()
-
-                                        ModUpdateManager.applyUpdates(
-                                            context = activity,
-                                            updates = updates,
-                                            gameDir = gameDir,
-                                            onProgress = { current, total, fileName, percent ->
-                                                progressToast.setText("Downloading $fileName ($percent%)")
-                                            },
-                                            onComplete = {
-                                                progressToast.cancel()
-                                                Toast.makeText(activity, "Updates completed", Toast.LENGTH_LONG).show()
-                                            },
-                                            onError = { e ->
-                                                progressToast.cancel()
-                                                Tools.showError(activity, "Update failed: ${e.message}", e)
-                                            }
-                                        )
-                                    }
-                                    .setNegativeButton("Cancel", null)
-                                    .show()
+                                showUpdateSelectionDialog(activity, updates, gameDir)
                             }
                         },
                         onError = { e ->
-                            toast.cancel()
+                            checkingDialog.dismiss()
                             binding.checkUpdates.isEnabled = true
                             Tools.showError(activity, "Update check failed: ${e.message}", e)
                         }
