@@ -4,12 +4,14 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
+import android.widget.Toast
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.PopupWindow
 import android.widget.RadioButton
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.RecyclerView
@@ -18,14 +20,19 @@ import com.arata.yukarilauncher.R
 import com.arata.yukarilauncher.databinding.ItemVersionBinding
 import com.arata.yukarilauncher.databinding.ViewVersionManagerBinding
 import com.arata.yukarilauncher.feature.customprofilepath.ProfilePathManager
+import com.arata.yukarilauncher.feature.mod.modpack.export.ExportPathPickerDialog
+import com.arata.yukarilauncher.feature.mod.modpack.export.ModPackExportHelper
 import com.arata.yukarilauncher.feature.version.Version
 import com.arata.yukarilauncher.feature.version.utils.VersionIconUtils
 import com.arata.yukarilauncher.feature.version.VersionsManager
 import com.arata.yukarilauncher.task.Task
+import com.arata.yukarilauncher.task.TaskExecutors
+import com.arata.yukarilauncher.ui.dialog.EditTextDialog
 import com.arata.yukarilauncher.ui.dialog.TipDialog
 import com.arata.yukarilauncher.ui.fragment.FilesFragment
 import com.arata.yukarilauncher.utils.ZHTools
 import com.arata.yukarilauncher.utils.file.FileDeletionHandler
+import com.arata.yukarilauncher.utils.file.FileTools
 import net.kdt.pojavlaunch.Tools
 
 class VersionAdapter(
@@ -197,6 +204,7 @@ class VersionAdapter(
                         gamePath -> swapPath(version.getGameDir().absolutePath)
                         rename -> VersionsManager.openRenameDialog(context, version)
                         copy -> VersionsManager.openCopyDialog(context, version)
+                        exportModpack -> showExportDialog(version)
                         delete -> deleteVersion(version, context.getString(R.string.version_manager_delete_tip, version.getVersionName()))
                         else -> {}
                     }
@@ -206,6 +214,7 @@ class VersionAdapter(
                 gamePath.setOnClickListener(onClickListener)
                 rename.setOnClickListener(onClickListener)
                 copy.setOnClickListener(onClickListener)
+                exportModpack.setOnClickListener(onClickListener)
                 delete.setOnClickListener(onClickListener)
             }
             managerPopupWindow.apply {
@@ -215,6 +224,106 @@ class VersionAdapter(
                 this.height = viewBinding.root.measuredHeight
                 showAsDropDown(anchorView, anchorView.measuredWidth, 0)
             }
+        }
+
+        private fun showExportDialog(version: Version) {
+            val context = parentFragment.requireActivity()
+            val labels = arrayOf(
+                context.getString(R.string.version_manager_export_modpack_modrinth),
+                context.getString(R.string.version_manager_export_modpack_curseforge)
+            )
+            val types = arrayOf(
+                ModPackExportHelper.ExportType.MODRINTH,
+                ModPackExportHelper.ExportType.CURSEFORGE
+            )
+
+            AlertDialog.Builder(context, R.style.CustomAlertDialogTheme)
+                .setTitle(R.string.version_manager_export_modpack)
+                .setItems(labels) { _, which ->
+                    showExportFilterDialog(version, types[which])
+                }.show()
+        }
+
+        private fun showExportFilterDialog(version: Version, exportType: ModPackExportHelper.ExportType) {
+            val context = parentFragment.requireActivity()
+            ExportPathPickerDialog(
+                context = context,
+                rootDir = version.getGameDir(),
+                title = context.getString(R.string.version_manager_export_modpack_include_title),
+                defaultChecked = emptySet()
+            ) { includePaths ->
+                if (includePaths.isEmpty()) {
+                    Toast.makeText(context, R.string.version_manager_export_modpack_select_required, Toast.LENGTH_SHORT).show()
+                    return@ExportPathPickerDialog
+                }
+                showMetadataDialog(version, exportType, includePaths)
+            }.show()
+        }
+
+        private fun showMetadataDialog(
+            version: Version,
+            exportType: ModPackExportHelper.ExportType,
+            includePaths: Set<String>
+        ) {
+            val context = parentFragment.requireActivity()
+            EditTextDialog.Builder(context)
+                .setTitle(R.string.version_manager_export_modpack_name_title)
+                .setHintText(version.getVersionName())
+                .setEditText(version.getVersionName())
+                .setAsRequired()
+                .setConfirmListener { nameEditText, _ ->
+                    val packName = nameEditText.text.toString()
+                    EditTextDialog.Builder(context)
+                        .setTitle(R.string.version_manager_export_modpack_version_title)
+                        .setHintText(version.getVersionInfo()?.minecraftVersion ?: "1.0.0")
+                        .setEditText(version.getVersionInfo()?.minecraftVersion ?: "1.0.0")
+                        .setAsRequired()
+                        .setConfirmListener { versionEditText, _ ->
+                            val packVersion = versionEditText.text.toString()
+                            EditTextDialog.Builder(context)
+                                .setTitle(R.string.version_manager_export_modpack_author_title)
+                                .setHintText("YukariLauncher")
+                                .setEditText("YukariLauncher")
+                                .setAsRequired()
+                                .setConfirmListener { authorEditText, _ ->
+                                    executeExport(
+                                        version,
+                                        exportType,
+                                        ModPackExportHelper.ExportOptions(
+                                            includePaths = includePaths,
+                                            packName = packName,
+                                            packVersion = packVersion,
+                                            author = authorEditText.text.toString()
+                                        )
+                                    )
+                                    true
+                                }.showDialog()
+                            true
+                        }.showDialog()
+                    true
+                }.showDialog()
+        }
+
+        private fun executeExport(
+            version: Version,
+            exportType: ModPackExportHelper.ExportType,
+            options: ModPackExportHelper.ExportOptions
+        ) {
+            val context = parentFragment.requireActivity()
+            Task.runTask {
+                ModPackExportHelper.export(version, exportType, options)
+            }.setExecutor(TaskExecutors.getDefault())
+                .ended(TaskExecutors.getAndroidUI()) { file ->
+                    if (file == null || !file.exists()) return@ended
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.version_manager_export_modpack_success, file.absolutePath),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    FileTools.shareFile(context, file)
+                }.onThrowable(TaskExecutors.getAndroidUI()) {
+                    Tools.showError(context, it)
+                }.execute()
         }
 
         private fun swapPath(path: String) {
