@@ -4,8 +4,6 @@ import com.arata.yukarilauncher.feature.version.Version
 import com.arata.yukarilauncher.utils.file.FileTools
 import com.arata.yukarilauncher.feature.customprofilepath.ProfilePathHome
 import net.kdt.pojavlaunch.Tools
-import net.kdt.pojavlaunch.modloaders.modpacks.models.CurseManifest
-import net.kdt.pojavlaunch.modloaders.modpacks.models.ModrinthIndex
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Locale
@@ -35,24 +33,25 @@ class ModPackExportHelper {
             val filenameVersion = (options.packVersion ?: version.getVersionName()).replace("/", "_")
             val exportFile = File(exportDir, "${version.getVersionName()}-$filenameVersion$suffix")
             val dependencies = buildDependencies(version)
+            val includedFiles = collectIncludedFiles(gameDir, options)
 
             ZipOutputStream(FileOutputStream(exportFile)).use { zos ->
                 when (exportType) {
                     ExportType.MODRINTH -> {
-                        val index = buildModrinthIndex(version, dependencies, options)
+                        val index = buildModrinthIndex(version, dependencies, options, includedFiles)
                         writeJsonEntry(zos, "modrinth.index.json", index)
                     }
 
                     ExportType.CURSEFORGE -> {
-                        val manifest = buildCurseManifest(version, dependencies, options)
+                        val manifest = buildCurseManifest(version, dependencies, options, includedFiles)
                         writeJsonEntry(zos, "manifest.json", manifest)
+                        writeHtmlEntry(zos, "modlist.html", buildModListHtml(includedFiles))
                     }
                 }
 
-                FileTools.zipDirectory(gameDir, "overrides/", { file ->
-                    val relativePath = gameDir.toPath().relativize(file.toPath()).toString().replace('\\', '/')
-                    shouldInclude(relativePath, options)
-                }, zos)
+                includedFiles.forEach { (path, file) ->
+                    FileTools.zipFile(file, "overrides/$path", zos)
+                }
             }
 
             return exportFile
@@ -67,6 +66,16 @@ class ModPackExportHelper {
             if (exclude.any { normalizedPath == it || normalizedPath.startsWith("$it/") }) return false
             if (include.isEmpty()) return true
             return include.any { normalizedPath == it || normalizedPath.startsWith("$it/") }
+        }
+
+        private fun collectIncludedFiles(gameDir: File, options: ExportOptions): List<Pair<String, File>> {
+            return gameDir.walkTopDown()
+                .filter { it.isFile }
+                .map { file ->
+                    gameDir.toPath().relativize(file.toPath()).toString().replace('\\', '/') to file
+                }
+                .filter { (path, _) -> shouldInclude(path, options) }
+                .toList()
         }
 
         private fun buildDependencies(version: Version): MutableMap<String, String> {
@@ -87,45 +96,100 @@ class ModPackExportHelper {
             return dependencies
         }
 
-        private fun buildModrinthIndex(version: Version, dependencies: Map<String, String>, options: ExportOptions): ModrinthIndex {
-            return ModrinthIndex().apply {
-                formatVersion = 1
-                game = "minecraft"
-                versionId = options.packVersion ?: version.getVersionName()
-                name = options.packName ?: version.getVersionName()
-                summary = "Exported from YukariLauncher"
-                files = emptyArray()
-                this.dependencies = dependencies
+        private fun buildModrinthIndex(
+            version: Version,
+            dependencies: Map<String, String>,
+            options: ExportOptions,
+            includedFiles: List<Pair<String, File>>
+        ): Map<String, Any> {
+            val files = includedFiles.map { (path, file) ->
+                mapOf(
+                    "path" to path,
+                    "hashes" to mapOf(
+                        "sha1" to FileTools.calculateFileHash(file, "SHA-1"),
+                        "sha512" to FileTools.calculateFileHash(file, "SHA-512")
+                    ),
+                    "env" to mapOf(
+                        "client" to "required",
+                        "server" to "required"
+                    ),
+                    "downloads" to listOf(file.toURI().toString()),
+                    "fileSize" to file.length()
+                )
             }
+            return mapOf(
+                "formatVersion" to 1,
+                "game" to "minecraft",
+                "versionId" to (options.packVersion ?: version.getVersionName()),
+                "name" to (options.packName ?: version.getVersionName()),
+                "files" to files,
+                "dependencies" to dependencies
+            )
         }
 
-        private fun buildCurseManifest(versionObj: Version, dependencies: Map<String, String>, options: ExportOptions): CurseManifest {
-            return CurseManifest().apply {
-                name = options.packName ?: versionObj.getVersionName()
-                this.version = options.packVersion ?: "1.0.0"
-                author = options.author ?: "YukariLauncher"
-                manifestType = "minecraftModpack"
-                manifestVersion = 1
-                files = emptyArray()
-                overrides = "overrides"
-                minecraft = CurseManifest.CurseMinecraft().apply {
-                    version = dependencies["minecraft"] ?: versionObj.getVersionName()
-                    modLoaders = dependencies.entries
-                        .filter { it.key != "minecraft" }
-                        .map {
-                            CurseManifest.CurseModLoader().apply {
-                                id = "${it.key}-${it.value}"
-                                primary = true
-                            }
-                        }.toTypedArray()
+        private fun buildCurseManifest(
+            versionObj: Version,
+            dependencies: Map<String, String>,
+            options: ExportOptions,
+            includedFiles: List<Pair<String, File>>
+        ): Map<String, Any> {
+            val curseFiles = includedFiles
+                .filter { (path, _) -> path.startsWith("mods/") }
+                .map { (path, file) ->
+                    val parsedIds = parseCurseIds(file.name)
+                    mapOf(
+                        "projectID" to parsedIds.first,
+                        "fileID" to parsedIds.second,
+                        "required" to true,
+                        "isLocked" to false,
+                        "path" to path
+                    )
                 }
-            }
+
+            val modLoaders = dependencies.entries
+                .filter { it.key != "minecraft" }
+                .map { mapOf("id" to "${it.key}-${it.value}", "primary" to true) }
+
+            return mapOf(
+                "minecraft" to mapOf(
+                    "version" to (dependencies["minecraft"] ?: versionObj.getVersionName()),
+                    "modLoaders" to modLoaders
+                ),
+                "manifestType" to "minecraftModpack",
+                "manifestVersion" to 1,
+                "name" to (options.packName ?: versionObj.getVersionName()),
+                "version" to (options.packVersion ?: "1.0.0"),
+                "author" to (options.author ?: "YukariLauncher"),
+                "files" to curseFiles,
+                "overrides" to "overrides"
+            )
         }
 
         private fun writeJsonEntry(zos: ZipOutputStream, entryName: String, obj: Any) {
             zos.putNextEntry(ZipEntry(entryName))
             zos.write(Tools.GLOBAL_GSON.toJson(obj).toByteArray())
             zos.closeEntry()
+        }
+
+        private fun writeHtmlEntry(zos: ZipOutputStream, entryName: String, html: String) {
+            zos.putNextEntry(ZipEntry(entryName))
+            zos.write(html.toByteArray())
+            zos.closeEntry()
+        }
+
+        private fun parseCurseIds(fileName: String): Pair<Long, Long> {
+            val numbers = Regex("(\\d+)").findAll(fileName).map { it.value.toLong() }.toList()
+            return if (numbers.size >= 2) numbers[numbers.size - 2] to numbers.last() else 0L to 0L
+        }
+
+        private fun buildModListHtml(includedFiles: List<Pair<String, File>>): String {
+            val mods = includedFiles.filter { (path, _) -> path.startsWith("mods/") }
+            val listItems = mods.joinToString("\n") { (_, file) ->
+                val modName = file.nameWithoutExtension
+                val slug = modName.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-')
+                """<li><a href="https://www.curseforge.com/minecraft/mc-mods/$slug">$modName</a></li>"""
+            }
+            return "<ul>\n$listItems\n</ul>"
         }
     }
 }
