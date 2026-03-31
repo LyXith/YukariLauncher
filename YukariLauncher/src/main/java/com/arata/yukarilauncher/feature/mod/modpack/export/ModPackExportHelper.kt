@@ -176,14 +176,20 @@ class ModPackExportHelper {
                         "projectID" to (project?.projectId ?: parsedIds.first),
                         "fileID" to (project?.fileId ?: parsedIds.second),
                         "required" to true,
-                        "isLocked" to false,
-                        "path" to path
+                        "isLocked" to false
                     )
                 }
 
             val modLoaders = dependencies.entries
                 .filter { it.key != "minecraft" }
-                .map { mapOf("id" to "${it.key}-${it.value}", "primary" to true) }
+                .map {
+                    val curseLoaderName = when (it.key) {
+                        "fabric-loader" -> "fabric"
+                        "quilt-loader" -> "quilt"
+                        else -> it.key
+                    }
+                    mapOf("id" to "$curseLoaderName-${it.value}", "primary" to true)
+                }
 
             return mapOf(
                 "minecraft" to mapOf(
@@ -195,8 +201,7 @@ class ModPackExportHelper {
                 "name" to (options.packName ?: versionObj.getVersionName()),
                 "version" to (options.packVersion ?: "1.0.0"),
                 "author" to (options.author ?: "YukariLauncher"),
-                "files" to curseFiles,
-                "overrides" to "overrides"
+                "files" to curseFiles
             )
         }
 
