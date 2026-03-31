@@ -20,6 +20,7 @@ import com.arata.yukarilauncher.R
 import com.arata.yukarilauncher.databinding.ItemVersionBinding
 import com.arata.yukarilauncher.databinding.ViewVersionManagerBinding
 import com.arata.yukarilauncher.feature.customprofilepath.ProfilePathManager
+import com.arata.yukarilauncher.feature.mod.modpack.export.ExportPathPickerDialog
 import com.arata.yukarilauncher.feature.mod.modpack.export.ModPackExportHelper
 import com.arata.yukarilauncher.feature.version.Version
 import com.arata.yukarilauncher.feature.version.utils.VersionIconUtils
@@ -245,15 +246,14 @@ class VersionAdapter(
 
         private fun showExportFilterDialog(version: Version, exportType: ModPackExportHelper.ExportType) {
             val context = parentFragment.requireActivity()
-            EditTextDialog.Builder(context)
-                .setTitle(R.string.version_manager_export_modpack_include_title)
-                .setMessage(R.string.version_manager_export_modpack_include_message)
-                .setHintText(R.string.version_manager_export_modpack_paths_hint)
-                .setConfirmListener { includeEditText, _ ->
-                    val includePaths = parsePaths(includeEditText.text.toString())
-                    showExcludeDialog(version, exportType, includePaths)
-                    true
-                }.showDialog()
+            ExportPathPickerDialog(
+                context = context,
+                rootDir = version.getGameDir(),
+                title = context.getString(R.string.version_manager_export_modpack_include_title),
+                defaultChecked = emptySet()
+            ) { includePaths ->
+                showExcludeDialog(version, exportType, includePaths)
+            }.show()
         }
 
         private fun showExcludeDialog(
@@ -262,13 +262,58 @@ class VersionAdapter(
             includePaths: Set<String>
         ) {
             val context = parentFragment.requireActivity()
+            ExportPathPickerDialog(
+                context = context,
+                rootDir = version.getGameDir(),
+                title = context.getString(R.string.version_manager_export_modpack_exclude_title),
+                defaultChecked = setOf("logs", "crash-reports")
+            ) { excludePaths ->
+                showMetadataDialog(version, exportType, includePaths, excludePaths)
+            }.show()
+        }
+
+        private fun showMetadataDialog(
+            version: Version,
+            exportType: ModPackExportHelper.ExportType,
+            includePaths: Set<String>,
+            excludePaths: Set<String>
+        ) {
+            val context = parentFragment.requireActivity()
             EditTextDialog.Builder(context)
-                .setTitle(R.string.version_manager_export_modpack_exclude_title)
-                .setMessage(R.string.version_manager_export_modpack_exclude_message)
-                .setEditText("logs, crash-reports")
-                .setHintText(R.string.version_manager_export_modpack_paths_hint)
-                .setConfirmListener { excludeEditText, _ ->
-                    executeExport(version, exportType, includePaths, parsePaths(excludeEditText.text.toString()))
+                .setTitle(R.string.version_manager_export_modpack_name_title)
+                .setHintText(version.getVersionName())
+                .setEditText(version.getVersionName())
+                .setAsRequired()
+                .setConfirmListener { nameEditText, _ ->
+                    val packName = nameEditText.text.toString()
+                    EditTextDialog.Builder(context)
+                        .setTitle(R.string.version_manager_export_modpack_version_title)
+                        .setHintText(version.getVersionInfo()?.minecraftVersion ?: "1.0.0")
+                        .setEditText(version.getVersionInfo()?.minecraftVersion ?: "1.0.0")
+                        .setAsRequired()
+                        .setConfirmListener { versionEditText, _ ->
+                            val packVersion = versionEditText.text.toString()
+                            EditTextDialog.Builder(context)
+                                .setTitle(R.string.version_manager_export_modpack_author_title)
+                                .setHintText("YukariLauncher")
+                                .setEditText("YukariLauncher")
+                                .setAsRequired()
+                                .setConfirmListener { authorEditText, _ ->
+                                    executeExport(
+                                        version,
+                                        exportType,
+                                        ModPackExportHelper.ExportOptions(
+                                            includePaths = includePaths,
+                                            excludePaths = excludePaths,
+                                            packName = packName,
+                                            packVersion = packVersion,
+                                            author = authorEditText.text.toString()
+                                        )
+                                    )
+                                    true
+                                }.showDialog()
+                            true
+                        }.showDialog()
                     true
                 }.showDialog()
         }
@@ -276,11 +321,9 @@ class VersionAdapter(
         private fun executeExport(
             version: Version,
             exportType: ModPackExportHelper.ExportType,
-            includePaths: Set<String>,
-            excludePaths: Set<String>
+            options: ModPackExportHelper.ExportOptions
         ) {
             val context = parentFragment.requireActivity()
-            val options = ModPackExportHelper.ExportOptions(includePaths, excludePaths)
             Task.runTask {
                 ModPackExportHelper.export(version, exportType, options)
             }.setExecutor(TaskExecutors.getDefault())
@@ -295,14 +338,6 @@ class VersionAdapter(
                 }.onThrowable(TaskExecutors.getAndroidUI()) {
                     Tools.showError(context, it)
                 }.execute()
-        }
-
-        private fun parsePaths(input: String): Set<String> {
-            return input.split(',', '\n')
-                .asSequence()
-                .map { it.trim().trim('/') }
-                .filter { it.isNotBlank() }
-                .toSet()
         }
 
         private fun swapPath(path: String) {

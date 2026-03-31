@@ -20,7 +20,10 @@ class ModPackExportHelper {
 
     data class ExportOptions(
         val includePaths: Set<String> = emptySet(),
-        val excludePaths: Set<String> = setOf("logs", "crash-reports")
+        val excludePaths: Set<String> = setOf("logs", "crash-reports"),
+        val packName: String? = null,
+        val packVersion: String? = null,
+        val author: String? = null
     )
 
     companion object {
@@ -29,18 +32,19 @@ class ModPackExportHelper {
             val gameDir = version.getGameDir()
             val exportDir = File(File(ProfilePathHome.getGameHome()).parentFile, "exported").apply { mkdirs() }
             val suffix = if (exportType == ExportType.MODRINTH) ".mrpack" else ".zip"
-            val exportFile = File(exportDir, "${version.getVersionName()}-${System.currentTimeMillis()}$suffix")
+            val filenameVersion = (options.packVersion ?: version.getVersionName()).replace("/", "_")
+            val exportFile = File(exportDir, "${version.getVersionName()}-$filenameVersion$suffix")
             val dependencies = buildDependencies(version)
 
             ZipOutputStream(FileOutputStream(exportFile)).use { zos ->
                 when (exportType) {
                     ExportType.MODRINTH -> {
-                        val index = buildModrinthIndex(version, dependencies)
+                        val index = buildModrinthIndex(version, dependencies, options)
                         writeJsonEntry(zos, "modrinth.index.json", index)
                     }
 
                     ExportType.CURSEFORGE -> {
-                        val manifest = buildCurseManifest(version, dependencies)
+                        val manifest = buildCurseManifest(version, dependencies, options)
                         writeJsonEntry(zos, "manifest.json", manifest)
                     }
                 }
@@ -83,23 +87,23 @@ class ModPackExportHelper {
             return dependencies
         }
 
-        private fun buildModrinthIndex(version: Version, dependencies: Map<String, String>): ModrinthIndex {
+        private fun buildModrinthIndex(version: Version, dependencies: Map<String, String>, options: ExportOptions): ModrinthIndex {
             return ModrinthIndex().apply {
                 formatVersion = 1
                 game = "minecraft"
-                versionId = version.getVersionName()
-                name = version.getVersionName()
+                versionId = options.packVersion ?: version.getVersionName()
+                name = options.packName ?: version.getVersionName()
                 summary = "Exported from YukariLauncher"
                 files = emptyArray()
                 this.dependencies = dependencies
             }
         }
 
-        private fun buildCurseManifest(versionObj: Version, dependencies: Map<String, String>): CurseManifest {
+        private fun buildCurseManifest(versionObj: Version, dependencies: Map<String, String>, options: ExportOptions): CurseManifest {
             return CurseManifest().apply {
-                name = versionObj.getVersionName()
-                this.version = "1.0.0"
-                author = "YukariLauncher"
+                name = options.packName ?: versionObj.getVersionName()
+                this.version = options.packVersion ?: "1.0.0"
+                author = options.author ?: "YukariLauncher"
                 manifestType = "minecraftModpack"
                 manifestVersion = 1
                 files = emptyArray()
