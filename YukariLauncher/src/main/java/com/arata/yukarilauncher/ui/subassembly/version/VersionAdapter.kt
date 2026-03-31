@@ -26,6 +26,7 @@ import com.arata.yukarilauncher.feature.version.utils.VersionIconUtils
 import com.arata.yukarilauncher.feature.version.VersionsManager
 import com.arata.yukarilauncher.task.Task
 import com.arata.yukarilauncher.task.TaskExecutors
+import com.arata.yukarilauncher.ui.dialog.EditTextDialog
 import com.arata.yukarilauncher.ui.dialog.TipDialog
 import com.arata.yukarilauncher.ui.fragment.FilesFragment
 import com.arata.yukarilauncher.utils.ZHTools
@@ -238,21 +239,70 @@ class VersionAdapter(
             AlertDialog.Builder(context, R.style.CustomAlertDialogTheme)
                 .setTitle(R.string.version_manager_export_modpack)
                 .setItems(labels) { _, which ->
-                    Task.runTask {
-                        ModPackExportHelper.export(version, types[which])
-                    }.setExecutor(TaskExecutors.getDefault())
-                        .ended(TaskExecutors.getAndroidUI()) { file ->
-                            if (file == null || !file.exists()) return@ended
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.version_manager_export_modpack_success, file.name),
-                                Toast.LENGTH_LONG
-                            ).show()
-                            FileTools.shareFile(context, file)
-                        }.onThrowable(TaskExecutors.getAndroidUI()) {
-                            Tools.showError(context, it)
-                        }.execute()
+                    showExportFilterDialog(version, types[which])
                 }.show()
+        }
+
+        private fun showExportFilterDialog(version: Version, exportType: ModPackExportHelper.ExportType) {
+            val context = parentFragment.requireActivity()
+            EditTextDialog.Builder(context)
+                .setTitle(R.string.version_manager_export_modpack_include_title)
+                .setMessage(R.string.version_manager_export_modpack_include_message)
+                .setHintText(R.string.version_manager_export_modpack_paths_hint)
+                .setConfirmListener { includeEditText, _ ->
+                    val includePaths = parsePaths(includeEditText.text.toString())
+                    showExcludeDialog(version, exportType, includePaths)
+                    true
+                }.showDialog()
+        }
+
+        private fun showExcludeDialog(
+            version: Version,
+            exportType: ModPackExportHelper.ExportType,
+            includePaths: Set<String>
+        ) {
+            val context = parentFragment.requireActivity()
+            EditTextDialog.Builder(context)
+                .setTitle(R.string.version_manager_export_modpack_exclude_title)
+                .setMessage(R.string.version_manager_export_modpack_exclude_message)
+                .setEditText("logs, crash-reports")
+                .setHintText(R.string.version_manager_export_modpack_paths_hint)
+                .setConfirmListener { excludeEditText, _ ->
+                    executeExport(version, exportType, includePaths, parsePaths(excludeEditText.text.toString()))
+                    true
+                }.showDialog()
+        }
+
+        private fun executeExport(
+            version: Version,
+            exportType: ModPackExportHelper.ExportType,
+            includePaths: Set<String>,
+            excludePaths: Set<String>
+        ) {
+            val context = parentFragment.requireActivity()
+            val options = ModPackExportHelper.ExportOptions(includePaths, excludePaths)
+            Task.runTask {
+                ModPackExportHelper.export(version, exportType, options)
+            }.setExecutor(TaskExecutors.getDefault())
+                .ended(TaskExecutors.getAndroidUI()) { file ->
+                    if (file == null || !file.exists()) return@ended
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.version_manager_export_modpack_success, file.absolutePath),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    FileTools.shareFile(context, file)
+                }.onThrowable(TaskExecutors.getAndroidUI()) {
+                    Tools.showError(context, it)
+                }.execute()
+        }
+
+        private fun parsePaths(input: String): Set<String> {
+            return input.split(',', '\n')
+                .asSequence()
+                .map { it.trim().trim('/') }
+                .filter { it.isNotBlank() }
+                .toSet()
         }
 
         private fun swapPath(path: String) {

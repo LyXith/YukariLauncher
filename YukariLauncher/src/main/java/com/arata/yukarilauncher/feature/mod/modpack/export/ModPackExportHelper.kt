@@ -2,7 +2,7 @@ package com.arata.yukarilauncher.feature.mod.modpack.export
 
 import com.arata.yukarilauncher.feature.version.Version
 import com.arata.yukarilauncher.utils.file.FileTools
-import com.arata.yukarilauncher.utils.path.PathManager
+import com.arata.yukarilauncher.feature.customprofilepath.ProfilePathHome
 import net.kdt.pojavlaunch.Tools
 import net.kdt.pojavlaunch.modloaders.modpacks.models.CurseManifest
 import net.kdt.pojavlaunch.modloaders.modpacks.models.ModrinthIndex
@@ -18,11 +18,16 @@ class ModPackExportHelper {
         CURSEFORGE
     }
 
+    data class ExportOptions(
+        val includePaths: Set<String> = emptySet(),
+        val excludePaths: Set<String> = setOf("logs", "crash-reports")
+    )
+
     companion object {
         @JvmStatic
-        fun export(version: Version, exportType: ExportType): File {
+        fun export(version: Version, exportType: ExportType, options: ExportOptions = ExportOptions()): File {
             val gameDir = version.getGameDir()
-            val exportDir = File(PathManager.DIR_APP_CACHE, "modpack_exports").apply { mkdirs() }
+            val exportDir = File(File(ProfilePathHome.getGameHome()).parentFile, "exported").apply { mkdirs() }
             val suffix = if (exportType == ExportType.MODRINTH) ".mrpack" else ".zip"
             val exportFile = File(exportDir, "${version.getVersionName()}-${System.currentTimeMillis()}$suffix")
             val dependencies = buildDependencies(version)
@@ -42,13 +47,22 @@ class ModPackExportHelper {
 
                 FileTools.zipDirectory(gameDir, "overrides/", { file ->
                     val relativePath = gameDir.toPath().relativize(file.toPath()).toString().replace('\\', '/')
-                    relativePath.isNotBlank() &&
-                        !relativePath.startsWith("logs/") &&
-                        !relativePath.startsWith("crash-reports/")
+                    shouldInclude(relativePath, options)
                 }, zos)
             }
 
             return exportFile
+        }
+
+        private fun shouldInclude(relativePath: String, options: ExportOptions): Boolean {
+            if (relativePath.isBlank()) return false
+            val normalizedPath = relativePath.trim('/')
+            val include = options.includePaths
+            val exclude = options.excludePaths
+
+            if (exclude.any { normalizedPath == it || normalizedPath.startsWith("$it/") }) return false
+            if (include.isEmpty()) return true
+            return include.any { normalizedPath == it || normalizedPath.startsWith("$it/") }
         }
 
         private fun buildDependencies(version: Version): MutableMap<String, String> {
