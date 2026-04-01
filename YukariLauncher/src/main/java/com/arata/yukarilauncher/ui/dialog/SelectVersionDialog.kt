@@ -16,6 +16,7 @@ class SelectVersionDialog(context: Context) : FullScreenDialog(context) {
     private lateinit var snapshotTab: TabLayout.Tab
     private lateinit var betaTab: TabLayout.Tab
     private lateinit var alphaTab: TabLayout.Tab
+    private lateinit var aprilFoolsTab: TabLayout.Tab
     private lateinit var returnTab: TabLayout.Tab
     private var versionType: VersionType? = null
 
@@ -64,6 +65,7 @@ class SelectVersionDialog(context: Context) : FullScreenDialog(context) {
             snapshotTab -> versionType = VersionType.SNAPSHOT
             betaTab -> versionType = VersionType.BETA
             alphaTab -> versionType = VersionType.ALPHA
+            aprilFoolsTab -> versionType = VersionType.APRIL_FOOLS
             else -> dismiss()
         }
     }
@@ -82,6 +84,7 @@ class SelectVersionDialog(context: Context) : FullScreenDialog(context) {
             snapshotTab = addNewTab(R.string.version_snapshot)
             betaTab = addNewTab(R.string.version_beta)
             alphaTab = addNewTab(R.string.version_alpha)
+            aprilFoolsTab = addNewTab(R.string.version_april_fools)
             returnTab = addNewTab(R.string.generic_return)
 
             selectTab(releaseTab)

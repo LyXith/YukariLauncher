@@ -25,14 +25,32 @@ import org.greenrobot.eventbus.EventBus;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 import kotlin.Pair;
 
 public class VersionListView extends LinearLayout {
+    private static final Set<String> APRIL_FOOLS_IDS = new HashSet<>(Arrays.asList(
+            "2.0_purple",
+            "2.0_red",
+            "2.0_blue",
+            "15w14a",
+            "1.rv-pre1",
+            "3d shareware v1.34",
+            "20w14infinite",
+            "22w13oneblockatatime",
+            "23w13a_or_b",
+            "24w14potato",
+            "25w14craftmine"
+    ));
+
     private Context context;
-    private List<JMinecraftVersionList.Version> releaseList, snapshotList, betaList, alphaList;
+    private List<JMinecraftVersionList.Version> releaseList, snapshotList, betaList, alphaList, aprilFoolsList;
     private FileRecyclerViewCreator fileRecyclerViewCreator;
     private VersionSelectedListener versionSelectedListener;
 
@@ -74,6 +92,7 @@ public class VersionListView extends LinearLayout {
         snapshotList = new FilteredSubList<>(versionArray, item -> item.type.equals("snapshot"));
         betaList = new FilteredSubList<>(versionArray, item -> item.type.equals("old_beta"));
         alphaList = new FilteredSubList<>(versionArray, item -> item.type.equals("old_alpha"));
+        aprilFoolsList = new FilteredSubList<>(versionArray, item -> isAprilFoolsVersion(item.id, item.type));
 
         fileRecyclerViewCreator = new FileRecyclerViewCreator(
                 context,
@@ -125,10 +144,18 @@ public class VersionListView extends LinearLayout {
                 return getVersion(context.getDrawable(R.drawable.ic_old_cobblestone), getVersionPair(betaList));
             case ALPHA:
                 return getVersion(context.getDrawable(R.drawable.ic_old_grass_block), getVersionPair(alphaList));
+            case APRIL_FOOLS:
+                return getVersion(context.getDrawable(R.drawable.ic_command_block), getVersionPair(aprilFoolsList));
             case RELEASE:
             default:
                 return getVersion(context.getDrawable(R.drawable.ic_minecraft), getVersionPair(releaseList));
         }
+    }
+
+    private boolean isAprilFoolsVersion(String id, String type) {
+        if (type != null && type.toLowerCase(Locale.ROOT).contains("april")) return true;
+        if (id == null) return false;
+        return APRIL_FOOLS_IDS.contains(id.toLowerCase(Locale.ROOT));
     }
 
     private List<FileItemBean> getVersion(Drawable icon, Pair<String, Date>[] namesPair) {

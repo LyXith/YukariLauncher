@@ -77,6 +77,7 @@
     <string name="version_snapshot">Snapshot</string>
     <string name="version_alpha">Alpha</string>
     <string name="version_beta">Beta</string>
+    <string name="version_april_fools">April Fools</string>
     <string name="force_exit_confirm">Are you sure you want to force close?</string>
     <string name="autoram_info_msg">Memory set to %d MB</string>
     <string name="memory_warning_msg">The available memory (%d) is lower than the allocated memory (%d), which may cause the game to crash. If the game crashes, please change the configuration!</string>
