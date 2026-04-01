@@ -132,6 +132,9 @@
     <string name="mod_check_progress_message">Checking mods (%d / %d)</string>
     <string name="mod_check_touch_controller">Detected that Touch Controller mod (%s) is installed, the launcher is ready to enable control proxy to adapt to the mod.</string>
     <string name="mod_check_physics">The currently used physics mod (%s) is unpatched (replacing libPhysXJniBindings_64.so from x86_64 architecture to arm64), will crash on launch.</string>
+    <string name="mod_check_physics_downloading">Downloading Physics mod library: %s</string>
+    <string name="mod_check_physics_failed">Failed to download required library for Physics mod (%s).</string>
+    <string name="mod_check_physics_debug">Debug: %s</string>
     <string name="mod_check_mcef">MCEF (%s) cannot run on Android. It is usually used as a prerequisite dependency for WebDisplays/In-game Browser (browser).</string>
     <string name="mod_check_valkyrien_skies">Valkyrien Skies/Valkyrien Warfare (%s) cannot run directly in single-player mode. You must run it on a server (Termux can be used), otherwise the game will crash.</string>
     <string name="mod_check_yes_steve_model">Yes Steve Model (%s) 2.2.2+ cannot run on Android.</string>

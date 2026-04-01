@@ -99,10 +99,14 @@ class ModChecker {
                                 "de/fabmax/physxjni/linux/libPhysXJniBindings_64.so"
                             )
                             if (arch.isBlank() or (!Architecture.isx86Device() and arch.contains("x86"))) {
-                                modCheckSettings[AllModCheckSettings.PHYSICS_MOD] = Pair(
-                                    "1",
-                                    context.getString(R.string.mod_check_physics, mod.file.name)
-                                )
+                                // Try to download the native library (no ABI check)
+                                val errorMessage = handlePhysics(context, mod.file)
+                                if (errorMessage != null) {
+                                    modCheckSettings[AllModCheckSettings.PHYSICS_MOD] = Pair(
+                                        "1",
+                                        errorMessage
+                                    )
+                                }
                             }
                         }
                     }
@@ -195,7 +199,58 @@ class ModChecker {
         }
     }
 
+    private fun handlePhysics(context: Context, modFile: File): String? {
+        val libFileName = "libPhysXJniBindings_64.so"
+        val targetFile = File(PathManager.DIR_MOD_LIBRARY, libFileName)
+
+        if (targetFile.exists()) {
+            Logging.i("Physics", "Library already exists: $targetFile")
+            return null
+        }
+
+        val url = "https://github.com/Shiraishi-Arata/Yukari-Fixes/releases/download/PhysX/$libFileName"
+        Logging.i("Physics", "Attempting to download $libFileName from $url")
+
+        TaskExecutors.runInUIThread {
+            com.kdt.mcgui.ProgressLayout.setProgress(
+                com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE,
+                0,
+                R.string.mod_check_physics_downloading,
+                libFileName
+            )
+        }
+
+        var error: String? = null
+        val thread = Thread {
+            try {
+                val connection = URL(url).openConnection()
+                connection.setRequestProperty("User-Agent", "YukariLauncher")
+                connection.connect()
+                connection.getInputStream().use { input ->
+                    targetFile.parentFile?.mkdirs()
+                    targetFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                Logging.i("Physics", "Successfully downloaded $libFileName")
+            } catch (e: Exception) {
+                Logging.e("Physics", "Failed to download $libFileName", e)
+                val errorDetail = "${e.javaClass.simpleName}: ${e.message ?: "No message"}"
+                error = context.getString(R.string.mod_check_physics_failed, modFile.name) + "\n" +
+                        context.getString(R.string.mod_check_physics_debug, errorDetail)
+            } finally {
+                TaskExecutors.runInUIThread {
+                    com.kdt.mcgui.ProgressLayout.clearProgress(com.kdt.mcgui.ProgressLayout.INSTALL_RESOURCE)
+                }
+            }
+        }
+        thread.start()
+        thread.join()
+        return error
+    }
+
     private fun handleAxiom(context: Context, modFile: File): String? {
+        // Determine the device's primary ABI and map to a tag name
         val deviceAbi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
         val abiTag = when {
             deviceAbi.contains("arm64") -> "arm64"
@@ -215,7 +270,7 @@ class ModChecker {
                     "arm64" -> name.contains("aarch64") || name.contains("arm64")
                     "x86_64" -> name.contains("x86_64") || name.contains("amd64")
                     "x86" -> name.contains("x86") && !name.contains("x86_64")
-                    "armeabi-v7a" -> name.contains("arm") && !name.contains("arm64") && !name.contains("aarch64")
+                    "arm" -> name.contains("arm") && !name.contains("arm64") && !name.contains("aarch64")
                     else -> true
                 }
                 if (name.contains("zstd-jni-") && name.endsWith(".so") && matchesAbi) {
