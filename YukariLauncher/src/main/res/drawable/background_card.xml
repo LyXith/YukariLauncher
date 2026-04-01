@@ -4,6 +4,6 @@
     <corners android:radius="@dimen/_12sdp" />
     <stroke
         android:width="@dimen/_1sdp"
-        android:color="#26FFFFFF" />
-    <solid android:color="@color/menu_overlay"/>
+        android:color="#4A7A3DDE" />
+    <solid android:color="#CC0E0F2A"/>
 </shape>

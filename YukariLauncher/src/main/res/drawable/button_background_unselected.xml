@@ -9,7 +9,7 @@
         <corners android:radius="@dimen/_10sdp" />
         <stroke
             android:width="@dimen/_1sdp"
-            android:color="#1FFFFFFF"/>
+            android:color="#44FFFFFF"/>
         <solid android:color="@color/button_background" />
         <padding
             android:bottom="@dimen/abc_button_padding_vertical_material"
