@@ -160,7 +160,6 @@ android {
 // because I'm build on Termux this only i can find (29.0.14206865)
 // https://github.com/lzhiyong/termux-ndk/releases
     ndkVersion = "29.0.14206865"
-    android.ndkPath = System.getenv("HOME") + "/android-sdk/ndk"
     
     externalNativeBuild {
         ndkBuild {

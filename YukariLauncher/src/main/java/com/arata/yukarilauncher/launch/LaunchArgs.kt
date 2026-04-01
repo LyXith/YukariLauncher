@@ -65,23 +65,34 @@ class LaunchArgs(
         val configFilePath = if (is7) LibPath.LOG4J_XML_1_7 else LibPath.LOG4J_XML_1_12
         argsList.add("-Dlog4j.configurationFile=${configFilePath.absolutePath}")
 
+        // Build the library path string
         val versionSpecificNativesDir = File(PathManager.DIR_CACHE, "natives/${minecraftVersion.getVersionName()}")
+        val libraryPath = StringBuilder()
         if (versionSpecificNativesDir.exists()) {
-            val dirPath = versionSpecificNativesDir.absolutePath
-            argsList.add("-Djava.library.path=$dirPath:${PathManager.DIR_NATIVE_LIB}")
-            argsList.add("-Djna.boot.library.path=$dirPath")
+            libraryPath.append(versionSpecificNativesDir.absolutePath).append(":")
         }
+        if (PathManager.DIR_MOD_LIBRARY.isNotEmpty()) {
+            libraryPath.append(PathManager.DIR_MOD_LIBRARY).append(":")
+        }
+        libraryPath.append(PathManager.DIR_NATIVE_LIB)
+        argsList.add("-Djava.library.path=$libraryPath")
+
+        // JNA boot library path (used by JNA, which some mods may rely on)
+        val jnaPath = StringBuilder()
+        if (versionSpecificNativesDir.exists()) {
+            jnaPath.append(versionSpecificNativesDir.absolutePath).append(":")
+        }
+        if (PathManager.DIR_MOD_LIBRARY.isNotEmpty()) {
+            jnaPath.append(PathManager.DIR_MOD_LIBRARY).append(":")
+        }
+        jnaPath.append(PathManager.DIR_NATIVE_LIB)
+        argsList.add("-Djna.boot.library.path=$jnaPath")
 
         return argsList
     }
 
     private fun getMinecraftJVMArgs(): Array<String> {
         val versionInfo = Tools.getVersionInfo(minecraftVersion, true)
-
-//        // Parse Forge 1.17+ additional JVM Arguments
-//        if (versionInfo.inheritsFrom == null || versionInfo.arguments == null || versionInfo.arguments.jvm == null) {
-//            return emptyArray()
-//        }
 
         val varArgMap: MutableMap<String, String?> = android.util.ArrayMap()
         varArgMap["classpath_separator"] = ":"
