@@ -1,7 +1,10 @@
 package net.kdt.pojavlaunch;
 
 import android.graphics.Color;
+import android.media.AudioManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.FrameLayout;
 
 import androidx.activity.OnBackPressedCallback;
@@ -19,12 +22,14 @@ import com.arata.yukarilauncher.ui.subassembly.view.GameMenuViewWrapper;
 import net.kdt.pojavlaunch.customcontrols.ControlLayout;
 import net.kdt.pojavlaunch.customcontrols.EditorExitable;
 
+import java.io.File;
 import java.io.IOException;
 
 public class CustomControlsActivity extends BaseActivity implements EditorExitable {
 	public static final String BUNDLE_CONTROL_PATH = "control_path";
 	private ActivityCustomControlsBinding binding;
 	private String mControlPath = null;
+	private boolean isVideoBackgroundPlaying;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -44,7 +49,7 @@ public class CustomControlsActivity extends BaseActivity implements EditorExitab
 			else drawerLayout.openDrawer(drawerNavigationView);
 		}, false).setVisibility(true);
 
-		BackgroundManager.setBackgroundImage(this, BackgroundType.CUSTOM_CONTROLS, binding.backgroundView, null);
+		refreshBackground();
 
 		drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED);
 		drawerLayout.setScrimColor(Color.TRANSPARENT);
@@ -84,5 +89,67 @@ public class CustomControlsActivity extends BaseActivity implements EditorExitab
 	@Override
 	public void exitEditor() {
 		finish();
+	}
+
+	@Override
+	protected void onResume() {
+		super.onResume();
+		if (isVideoBackgroundPlaying) {
+			binding.backgroundVideoView.start();
+		}
+	}
+
+	@Override
+	protected void onPause() {
+		super.onPause();
+		if (isVideoBackgroundPlaying && binding.backgroundVideoView.isPlaying()) {
+			binding.backgroundVideoView.pause();
+		}
+	}
+
+	@Override
+	protected void onDestroy() {
+		super.onDestroy();
+		stopVideoBackground();
+	}
+
+	private void refreshBackground() {
+		File mediaFile = BackgroundManager.getBackgroundImage(BackgroundType.CUSTOM_CONTROLS);
+		if (mediaFile != null && BackgroundManager.isVideo(mediaFile)) {
+			playVideoBackground(mediaFile);
+			return;
+		}
+		stopVideoBackground();
+		BackgroundManager.setBackgroundImage(this, BackgroundType.CUSTOM_CONTROLS, binding.backgroundView, null);
+	}
+
+	private void playVideoBackground(File videoFile) {
+		binding.backgroundView.setImageDrawable(null);
+		binding.backgroundView.setVisibility(View.GONE);
+		binding.backgroundVideoView.setVisibility(View.VISIBLE);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+			binding.backgroundVideoView.setAudioFocusRequest(AudioManager.AUDIOFOCUS_NONE);
+		}
+		binding.backgroundVideoView.setVideoPath(videoFile.getAbsolutePath());
+		binding.backgroundVideoView.setOnPreparedListener(mediaPlayer -> {
+			mediaPlayer.setVolume(0f, 0f);
+			mediaPlayer.setLooping(true);
+			binding.backgroundVideoView.start();
+			isVideoBackgroundPlaying = true;
+		});
+		binding.backgroundVideoView.setOnErrorListener((mp, what, extra) -> {
+			stopVideoBackground();
+			BackgroundManager.setBackgroundImage(this, BackgroundType.CUSTOM_CONTROLS, binding.backgroundView, null);
+			return true;
+		});
+	}
+
+	private void stopVideoBackground() {
+		if (isVideoBackgroundPlaying) {
+			binding.backgroundVideoView.stopPlayback();
+		}
+		isVideoBackgroundPlaying = false;
+		binding.backgroundVideoView.setVisibility(View.GONE);
+		binding.backgroundView.setVisibility(View.VISIBLE);
 	}
 }

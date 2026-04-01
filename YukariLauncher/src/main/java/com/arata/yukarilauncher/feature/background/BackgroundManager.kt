@@ -22,6 +22,7 @@ import java.util.Properties
 object BackgroundManager {
     private val FILE_BACKGROUND_PROPERTIES: File = File(PathManager.DIR_DATA, "background.properties")
     const val NULL: String = "null"
+    private val videoExtensions = setOf("mp4", "webm", "mkv", "3gp")
 
     private val defaultProperties: Properties
         get() {
@@ -98,14 +99,21 @@ object BackgroundManager {
         return pngName != null && pngName != NULL
     }
 
+    @JvmStatic
     fun getBackgroundImage(backgroundType: BackgroundType): File? {
         if (!hasBackgroundImage(backgroundType)) return null
 
         val pngName = properties[backgroundType.name] as String
 
         val backgroundImage = File(PathManager.DIR_BACKGROUND, pngName)
-        if (!backgroundImage.exists() || !isImage(backgroundImage)) return null
+        if (!backgroundImage.exists()) return null
+        if (!isImage(backgroundImage) && !isVideo(backgroundImage)) return null
         return backgroundImage
+    }
+
+    @JvmStatic
+    fun isVideo(file: File): Boolean {
+        return file.extension.lowercase() in videoExtensions
     }
 
     private fun saveProperties(properties: Properties) {

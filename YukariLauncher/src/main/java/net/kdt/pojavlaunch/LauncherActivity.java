@@ -8,6 +8,7 @@ import android.app.NotificationManager;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
+import android.media.AudioManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.method.LinkMovementMethod;
@@ -124,6 +125,7 @@ public class LauncherActivity extends BaseActivity {
     private ProgressServiceKeeper mProgressServiceKeeper;
     private NotificationManager mNotificationManager;
     private Future<?> checkNotice;
+    private boolean isVideoBackgroundPlaying;
 
     /* Allows to switch from one button "type" to another */
     private final FragmentManager.FragmentLifecycleCallbacks mFragmentCallbackListener = new FragmentManager.FragmentLifecycleCallbacks() {
@@ -492,6 +494,17 @@ public class LauncherActivity extends BaseActivity {
         super.onResume();
         setPageOpacity(AllSettings.getPageOpacity().getValue());
         VersionsManager.INSTANCE.refresh("LauncherActivity:onResume", false);
+        if (isVideoBackgroundPlaying) {
+            binding.backgroundVideoView.start();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (isVideoBackgroundPlaying && binding.backgroundVideoView.isPlaying()) {
+            binding.backgroundVideoView.pause();
+        }
     }
 
     @Override
@@ -509,6 +522,7 @@ public class LauncherActivity extends BaseActivity {
 
         getSupportFragmentManager().unregisterFragmentLifecycleCallbacks(mFragmentCallbackListener);
         ContextExecutor.clearActivity();
+        stopVideoBackground();
     }
 
     @Override
@@ -585,7 +599,45 @@ public class LauncherActivity extends BaseActivity {
     }
 
     private void refreshBackground() {
+        File mediaFile = BackgroundManager.getBackgroundImage(BackgroundType.MAIN_MENU);
+        if (mediaFile != null && BackgroundManager.isVideo(mediaFile)) {
+            playVideoBackground(mediaFile);
+            refreshTopBarColor(false);
+            return;
+        }
+
+        stopVideoBackground();
         BackgroundManager.setBackgroundImage(this, BackgroundType.MAIN_MENU, binding.backgroundView, this::refreshTopBarColor);
+    }
+
+    private void playVideoBackground(File videoFile) {
+        binding.backgroundView.setImageDrawable(null);
+        binding.backgroundView.setVisibility(View.GONE);
+        binding.backgroundVideoView.setVisibility(View.VISIBLE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            binding.backgroundVideoView.setAudioFocusRequest(AudioManager.AUDIOFOCUS_NONE);
+        }
+        binding.backgroundVideoView.setVideoPath(videoFile.getAbsolutePath());
+        binding.backgroundVideoView.setOnPreparedListener(mediaPlayer -> {
+            mediaPlayer.setVolume(0f, 0f);
+            mediaPlayer.setLooping(true);
+            binding.backgroundVideoView.start();
+            isVideoBackgroundPlaying = true;
+        });
+        binding.backgroundVideoView.setOnErrorListener((mp, what, extra) -> {
+            stopVideoBackground();
+            BackgroundManager.setBackgroundImage(this, BackgroundType.MAIN_MENU, binding.backgroundView, this::refreshTopBarColor);
+            return true;
+        });
+    }
+
+    private void stopVideoBackground() {
+        if (isVideoBackgroundPlaying) {
+            binding.backgroundVideoView.stopPlayback();
+        }
+        isVideoBackgroundPlaying = false;
+        binding.backgroundVideoView.setVisibility(View.GONE);
+        binding.backgroundView.setVisibility(View.VISIBLE);
     }
 
     private void refreshTopBarColor(boolean loadFromBackground) {

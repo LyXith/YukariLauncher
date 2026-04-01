@@ -10,6 +10,12 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"/>
 
+    <VideoView
+        android:id="@+id/background_video_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/top_layout"
         android:layout_width="match_parent"

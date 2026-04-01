@@ -15,6 +15,13 @@
         android:translationZ="-2dp"
         tools:ignore="ContentDescription" />
 
+    <VideoView
+        android:id="@+id/background_video_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:translationZ="-2dp"
+        android:visibility="gone" />
+
     <FrameLayout
         android:id="@+id/content_frame"
         android:layout_width="match_parent"
@@ -116,4 +123,3 @@
         android:fitsSystemWindows="false" />
 
 </androidx.drawerlayout.widget.DrawerLayout>
-

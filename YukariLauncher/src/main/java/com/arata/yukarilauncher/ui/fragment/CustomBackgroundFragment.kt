@@ -94,10 +94,12 @@ class CustomBackgroundFragment : FragmentWithAnim(R.layout.fragment_custom_backg
                         val fileName = file!!.name
 
                         val image = isImage(file)
+                        val video = BackgroundManager.isVideo(file)
+                        val mediaFile = image || video
                         val filesButton = FilesButton()
-                        filesButton.setButtonVisibility(false, false, true, true, true, image)
+                        filesButton.setButtonVisibility(false, false, true, true, true, mediaFile)
                         //默认虚拟鼠标不支持分享、重命名、删除操作
-                        val message = if (image) { //如果选中的不是一个图片，那么将显示默认的文件选择提示信息
+                        val message = if (mediaFile) { //如果选中的不是图片或视频，那么将显示默认的文件选择提示信息
                             getString(R.string.custom_background_dialog_message, currentStatusName)
                         } else {
                             getString(R.string.file_message)
@@ -155,7 +157,7 @@ class CustomBackgroundFragment : FragmentWithAnim(R.layout.fragment_custom_backg
                 }
 
                 returnButton.setOnClickListener { ZHTools.onBackPressed(requireActivity()) }
-                addFileButton.setOnClickListener { openDocumentLauncher?.launch(arrayOf("image/*")) }
+                addFileButton.setOnClickListener { openDocumentLauncher?.launch(arrayOf("image/*", "video/*")) }
                 refreshButton.setOnClickListener {
                     fileRecyclerView.listFileAt(backgroundPath())
                 }

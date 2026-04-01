@@ -17,6 +17,8 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
+import android.media.AudioManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.view.InputDevice;
@@ -116,6 +118,7 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
     private SimpleTextWatcher mInputWatcher;
     private final AnimPlayer mInputPreviewAnim = new AnimPlayer();
     boolean isKeyboardVisible = false;
+    private boolean isVideoBackgroundPlaying;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -169,7 +172,7 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
         mGameMenuWrapper = new GameMenuViewWrapper(this, v -> onClickedMenu(), true);
         touchCharInput = binding.mainTouchCharInput;
 
-        BackgroundManager.setBackgroundImage(this, BackgroundType.IN_GAME, binding.backgroundView, null);
+        refreshBackground();
 
         keyboardDialog = new KeyboardDialog(this).setShowSpecialButtons(false);
 
@@ -226,6 +229,7 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
 
             binding.mainGameRenderView.setOnRenderingStartedListener(() -> {
                 //彻底清除背景图片，确保一些设备不再出现“半透明渲染”的问题
+                stopVideoBackground();
                 BackgroundManager.clearBackgroundImage(binding.backgroundView);
                 Logging.i("Rendering Game", "The game rendering has started, " +
                         "and the background image has been cleared to prevent certain issues from occurring.");
@@ -284,6 +288,9 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
     @Override
     public void onResume() {
         super.onResume();
+        if (isVideoBackgroundPlaying) {
+            binding.backgroundVideoView.start();
+        }
         if (AllStaticSettings.enableGyro) mGyroControl.enable();
         CallbackBridge.nativeSetWindowAttrib(LwjglGlfwKeycode.GLFW_FOCUSED, 1);
         CallbackBridge.nativeSetWindowAttrib(LwjglGlfwKeycode.GLFW_HOVERED, 1);
@@ -294,6 +301,9 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
         mGyroControl.disable();
         if (CallbackBridge.isGrabbing()){
             sendKeyPress(LwjglGlfwKeycode.GLFW_KEY_ESCAPE);
+        }
+        if (isVideoBackgroundPlaying && binding.backgroundVideoView.isPlaying()) {
+            binding.backgroundVideoView.pause();
         }
         CallbackBridge.nativeSetWindowAttrib(LwjglGlfwKeycode.GLFW_FOCUSED, 0);
         CallbackBridge.nativeSetWindowAttrib(LwjglGlfwKeycode.GLFW_HOVERED, 0);
@@ -325,7 +335,49 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
         CallbackBridge.removeGrabListener(binding.mainTouchpad);
         CallbackBridge.removeGrabListener(binding.mainGameRenderView);
         getWindow().getDecorView().getViewTreeObserver().removeOnGlobalLayoutListener(this);
+        stopVideoBackground();
         ContextExecutor.clearActivity();
+    }
+
+    private void refreshBackground() {
+        File mediaFile = BackgroundManager.getBackgroundImage(BackgroundType.IN_GAME);
+        if (mediaFile != null && BackgroundManager.isVideo(mediaFile)) {
+            playVideoBackground(mediaFile);
+            return;
+        }
+
+        stopVideoBackground();
+        BackgroundManager.setBackgroundImage(this, BackgroundType.IN_GAME, binding.backgroundView, null);
+    }
+
+    private void playVideoBackground(File videoFile) {
+        binding.backgroundView.setImageDrawable(null);
+        binding.backgroundView.setVisibility(View.GONE);
+        binding.backgroundVideoView.setVisibility(View.VISIBLE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            binding.backgroundVideoView.setAudioFocusRequest(AudioManager.AUDIOFOCUS_NONE);
+        }
+        binding.backgroundVideoView.setVideoPath(videoFile.getAbsolutePath());
+        binding.backgroundVideoView.setOnPreparedListener(mediaPlayer -> {
+            mediaPlayer.setVolume(0f, 0f);
+            mediaPlayer.setLooping(true);
+            binding.backgroundVideoView.start();
+            isVideoBackgroundPlaying = true;
+        });
+        binding.backgroundVideoView.setOnErrorListener((mp, what, extra) -> {
+            stopVideoBackground();
+            BackgroundManager.setBackgroundImage(this, BackgroundType.IN_GAME, binding.backgroundView, null);
+            return true;
+        });
+    }
+
+    private void stopVideoBackground() {
+        if (isVideoBackgroundPlaying) {
+            binding.backgroundVideoView.stopPlayback();
+        }
+        isVideoBackgroundPlaying = false;
+        binding.backgroundVideoView.setVisibility(View.GONE);
+        binding.backgroundView.setVisibility(View.VISIBLE);
     }
 
     @Override
