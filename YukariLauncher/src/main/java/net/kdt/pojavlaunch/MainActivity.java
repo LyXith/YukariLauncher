@@ -71,6 +71,7 @@ import com.arata.yukarilauncher.ui.subassembly.hotbar.HotbarType;
 import com.arata.yukarilauncher.ui.subassembly.hotbar.HotbarUtils;
 import com.arata.yukarilauncher.ui.subassembly.menu.ControlMenu;
 import com.arata.yukarilauncher.ui.subassembly.menu.MenuUtils;
+import com.arata.yukarilauncher.ui.subassembly.view.FloatingLoggerWindow; // floating logger
 import com.arata.yukarilauncher.ui.subassembly.view.GameMenuViewWrapper;
 import com.arata.yukarilauncher.utils.path.PathManager;
 import com.arata.yukarilauncher.utils.ZHTools;
@@ -120,6 +121,9 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
     boolean isKeyboardVisible = false;
     private boolean isVideoBackgroundPlaying;
 
+    // Floating logger
+    private FloatingLoggerWindow floatingLogger;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -163,11 +167,22 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
         //初始化输入监听器，当输入法遮挡了游戏画面时，将设置这个监听器
         mInputWatcher = s -> binding.inputPreview.setText(s.toString().trim());
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalLayoutListener(this);
+
+        // Register log listener
+        Logger.setLogListener(text -> {
+            runOnUiThread(() -> {
+                if (floatingLogger != null) {
+                    floatingLogger.appendLog(text + "\n");
+                }
+            });
+        });
     }
 
     protected void initLayout() {
         binding = ActivityGameBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
+        floatingLogger = new FloatingLoggerWindow(this);
+        floatingLogger.hide();   // start hidden
 
         mGameMenuWrapper = new GameMenuViewWrapper(this, v -> onClickedMenu(), true);
         touchCharInput = binding.mainTouchCharInput;
@@ -235,7 +250,10 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
                         "and the background image has been cleared to prevent certain issues from occurring.");
             });
 
-            if (AllSettings.getEnableLogOutput().getValue()) binding.mainLoggerView.setVisibilityWithAnim(true);
+            // Optionally auto-show floating logger based on setting
+            if (AllSettings.getEnableLogOutput().getValue()) {
+                floatingLogger.show();
+            }
 
             String mcInfo = "";
             VersionInfo versionInfo = minecraftVersion.getVersionInfo();
@@ -337,6 +355,13 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
         getWindow().getDecorView().getViewTreeObserver().removeOnGlobalLayoutListener(this);
         stopVideoBackground();
         ContextExecutor.clearActivity();
+
+        // Clean up floating logger
+        Logger.setLogListener(null);
+        if (floatingLogger != null) {
+            floatingLogger.hide();
+            floatingLogger = null;
+        }
     }
 
     private void refreshBackground() {
@@ -471,6 +496,16 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
             }
         }
         return handleEvent;
+    }
+
+    @Override
+    public void onBackPressed() {
+        // If floating logger is visible, hide it first instead of going back
+        if (floatingLogger != null && floatingLogger.isVisible()) {
+            floatingLogger.hide();
+            return;
+        }
+        super.onBackPressed();
     }
 
     public static void switchKeyboardState() {
@@ -736,7 +771,9 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
 
         @Override public void onClick(View v) {
             if (v == binding.forceClose) ZHTools.dialogForceClose(MainActivity.this);
-            else if (v == binding.logOutput) MainActivity.binding.mainLoggerView.toggleViewWithAnim();
+            else if (v == binding.logOutput) {
+                floatingLogger.toggle();
+            }
             else if (v == binding.sendCustomKey) dialogSendCustomKey();
             else if (v == binding.openMemoryInfoLayout) MenuUtils.toggleSwitchState(binding.openMemoryInfo);
             else if (v == binding.openFpsInfoLayout) MenuUtils.toggleSwitchState(binding.openFpsInfo);
